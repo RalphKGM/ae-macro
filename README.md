@@ -1,26 +1,26 @@
 # anime expeditions mac
 
-a mac version of the anime expeditions v0.4 macro, built around hammerspoon, a small swift helper, and local opencv detection.
+a mac port of the anime expeditions v0.4 flow, built around hammerspoon, a small swift helper, and local opencv detection.
 
-the included default is ready for king's tomb act 1 mastery. other modes can be added as normal tasks with their own lobby navigation json and strategy.
+the included profile has king's tomb act 1 mastery and a school grounds test task. placements and timing are team-specific, so check the strategy against the equipped units before leaving it unattended.
 
 ## what works
 
 - dashboard with a real 816x638 roblox window dock, start, pause, stop, status, logs, and run stats
 - unlimited ordered tasks with duplicate, reorder, enable, finite, infinite, and queue-loop controls
 - story, raid, challenge, and expedition task types
-- king's tomb act 1 mastery lobby navigation
-- custom lobby navigation for maps and modes not built in yet
+- built-in v0.4 navigation for story, spirit city raids, regular/hourly/daily/weekly challenges, and expeditions
+- custom lobby and team navigation actions for anything outside the v0.4 catalog
 - visual position editor using a saved 816x638 bird's-eye map
 - place, auto upgrade, upgrade, ability, target, sell, and wait actions
 - result detection, repeat, return to lobby, retries, and checkpoints
 - regular, hourly, daily, and weekly challenge counters
 - macos vision ocr fallback when digit templates are missing
 - guarded rainbow sprite auto craft after a configurable number of mastery wins
-- discord webhooks stored in macos keychain, with optional result screenshots
+- discord webhooks stored in macos keychain, with selectable events, reward text, attempt counts, task progress, and optional result screenshots
 - emergency stop from the gui, menu bar, or hotkey
 
-the first full live run passed on july 23, 2026: king's tomb act 1 mastery finished in 4m17s with one victory, no defeats, automatic placements, upgrades, and dps auto upgrade. return-to-lobby and the visible `10/10` regular challenge cap were also checked live.
+live testing on july 23, 2026 covered afk chamber to lobby, story/map/stage selection, private party creation, load detection, bird's-eye setup, confirmed placement, auto upgrade, defeat detection, reward parsing, and image-located repeat. the low-level alt team reached the school grounds result twice but could not win the stage. king's tomb mastery still needs a clean victory run with a capable equipped team.
 
 ## setup
 
@@ -51,14 +51,14 @@ check the install:
 ## basic use
 
 1. open roblox and join anime expeditions.
-2. press `control + option + command + g`.
+2. click the `ae` menu bar item, then click `open ae`. the gui hotkey is optional.
 3. check the task, strategy, and positions tabs.
 4. leave `start from` on `auto detect`.
 5. press `start selected task`.
 
 the dashboard cuts out a transparent dock for the real roblox window. the game content stays 816x638 and the macos title bar sits inside the dock above it. this is not a screenshot or video preview. clicks in the dashboard cutout are forwarded to roblox; forwarding turns off on the task, strategy, positions, and settings pages. the positions tab is separate and shows the saved bird's-eye image for the selected mode, map, stage, and difficulty.
 
-the default profile uses the current equipped team. the default king's tomb strategy has six placements and adds auto upgrade to the dps placements.
+the default profile uses the current equipped team. the king's tomb strategy is a starting layout, not a universal team preset. use the positions and strategy tabs to match unit costs, placement limits, and timing.
 
 ## tasks and maps
 
@@ -66,7 +66,7 @@ there is no task limit. every task can use a finite repetition count, infinite r
 
 setup downloads the 21 compatible 816x638 map images from the upstream v0.4 release. these cover the five story maps, spirit city raid acts 1-3, and three expedition maps. a map image provides the placement canvas; it does not provide the lobby navigation route or unit strategy.
 
-king's tomb act 1 mastery has a built-in route. a different map or mode needs a custom lobby route in the task editor until its route is added to the catalog. actions use the same 816x638 reference canvas:
+the v0.4 story maps, spirit city raid acts, challenge categories, and expedition maps have built-in routes. a newer map can use custom lobby actions in the task editor. actions use the same 816x638 reference canvas:
 
 ```json
 [
@@ -79,7 +79,7 @@ king's tomb act 1 mastery has a built-in route. a different map or mode needs a 
 ]
 ```
 
-supported route actions are `click`, `drag`, `key`, and `wait`. off-screen points are rejected when the profile is saved.
+supported route actions are `click`, `drag`, `scroll`, `key`, and `wait`. off-screen points are rejected when the profile is saved.
 
 the current equipped team needs no extra setup. if a task should switch teams, put that task's menu sequence in `custom team selection actions`; it runs in the lobby before the map route.
 
@@ -104,11 +104,11 @@ the task checkpoint advances before crafting. after the craft workflow, the queu
 
 challenge checks only run from the lobby before a challenge task. the macro opens the challenge panel, reads the visible counter, closes the panel, and either starts or skips that task.
 
-the regular `10/10` cap was read live through native macos ocr. local counters are kept as a fallback and only increment after a detected victory.
+the regular counter can be read through native macos ocr. local counters are kept as a fallback and only increment after a detected victory.
 
 ## discord
 
-paste the webhook in settings and save it. the url is stored in macos keychain and is not written to the profile or logs. only discord webhook hosts are accepted.
+paste the webhook in settings and save it. the url is stored in macos keychain and is not written to the profile or logs. only discord webhook hosts are accepted. enable the events you want, then use `send test`.
 
 enabled events can include start, victory, defeat, stop, error, craft, and challenge. result screenshots are optional.
 

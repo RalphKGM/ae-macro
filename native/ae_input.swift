@@ -80,10 +80,7 @@ func move(arguments: ArraySlice<String>) throws {
     }
 }
 
-func scroll(arguments: ArraySlice<String>) throws {
-    guard arguments.count == 1, let delta = Int32(arguments.first!) else {
-        throw InputError.usage("usage: ae-input scroll delta")
-    }
+func postScroll(_ delta: Int32) throws {
     guard let event = CGEvent(
         scrollWheelEvent2Source: nil,
         units: .line,
@@ -93,6 +90,68 @@ func scroll(arguments: ArraySlice<String>) throws {
         wheel3: 0
     ) else { throw InputError.event("could not create scroll event") }
     event.post(tap: .cghidEventTap)
+}
+
+func scroll(arguments: ArraySlice<String>) throws {
+    guard arguments.count == 1, let delta = Int32(arguments.first!) else {
+        throw InputError.usage("usage: ae-input scroll delta")
+    }
+    try postScroll(delta)
+}
+
+func zoom(arguments: ArraySlice<String>) throws {
+    guard arguments.count == 3 else {
+        throw InputError.usage("usage: ae-input zoom key wheel_delta duration_ms")
+    }
+    let values = Array(arguments)
+    let keyCodes: [String: CGKeyCode] = ["i": 34, "o": 31]
+    guard let keyCode = keyCodes[values[0].lowercased()] else {
+        throw InputError.usage("zoom key must be i or o")
+    }
+    let delta = Int32(try integer(values[1], "wheel_delta"))
+    let duration = max(try integer(values[2], "duration_ms"), 80)
+    guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+        throw InputError.event("could not create zoom key events")
+    }
+    keyDown.post(tap: .cghidEventTap)
+    defer { keyUp.post(tap: .cghidEventTap) }
+    var elapsed = 0
+    while elapsed < duration {
+        try postScroll(delta)
+        Thread.sleep(forTimeInterval: 0.08)
+        elapsed += 80
+    }
+}
+
+func pitchDown(arguments: ArraySlice<String>) throws {
+    guard arguments.count == 4 else {
+        throw InputError.usage("usage: ae-input pitch-down x y steps delta_y")
+    }
+    let values = Array(arguments)
+    let x = try number(values[0], "x")
+    let y = try number(values[1], "y")
+    let steps = max(try integer(values[2], "steps"), 1)
+    let deltaY = Int64(try integer(values[3], "delta_y"))
+    let point = CGPoint(x: x, y: y)
+    try postMouse(.mouseMoved, at: point, button: .right)
+    Thread.sleep(forTimeInterval: 0.08)
+    try postMouse(.rightMouseDown, at: point, button: .right)
+    Thread.sleep(forTimeInterval: 0.12)
+    defer { try? postMouse(.rightMouseUp, at: point, button: .right) }
+    for _ in 0..<steps {
+        guard let event = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .rightMouseDragged,
+            mouseCursorPosition: point,
+            mouseButton: .right
+        ) else { throw InputError.event("could not create camera pitch event") }
+        event.setIntegerValueField(.mouseEventDeltaX, value: 0)
+        event.setIntegerValueField(.mouseEventDeltaY, value: deltaY)
+        event.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.012)
+    }
+    Thread.sleep(forTimeInterval: 0.12)
 }
 
 func integer(_ value: String, _ label: String) throws -> Int {
@@ -122,8 +181,10 @@ func recognizeText(arguments: ArraySlice<String>) throws {
               x + width <= cgImage.width, y + height <= cgImage.height else {
             throw InputError.usage("ocr region is outside the image")
         }
-        let bottomY = cgImage.height - y - height
-        guard let cropped = cgImage.cropping(to: CGRect(x: x, y: bottomY, width: width, height: height)) else {
+        // CGImage cropping uses the image-data origin here. The runtime sends
+        // top-left screen coordinates, so using y directly keeps OCR ROIs
+        // aligned with the normalized 816×638 frame.
+        guard let cropped = cgImage.cropping(to: CGRect(x: x, y: y, width: width, height: height)) else {
             throw InputError.event("could not crop ocr region")
         }
         cgImage = cropped
@@ -165,6 +226,8 @@ do {
     case "move": try move(arguments: arguments.dropFirst())
     case "right-drag": try rightDrag(arguments: arguments.dropFirst())
     case "scroll": try scroll(arguments: arguments.dropFirst())
+    case "zoom": try zoom(arguments: arguments.dropFirst())
+    case "pitch-down": try pitchDown(arguments: arguments.dropFirst())
     case "ocr": try recognizeText(arguments: arguments.dropFirst())
     default: throw InputError.usage("unsupported command: \(command)")
     }

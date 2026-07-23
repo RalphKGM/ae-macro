@@ -104,6 +104,7 @@
               <option value="finished_stage">finished stage</option>
               <option value="repeat">results screen</option>
               <option value="stage_ready">start game screen</option>
+              <option value="monitor">monitor current battle</option>
             </select>
           </label>
           <button id="dashboardStartBtn" class="button primary wide">start selected task</button>
@@ -138,6 +139,7 @@
             <button id="saveTasksBtn" class="button primary">save tasks</button>
           </div>
         </div>
+        <datalist id="mapCatalog"></datalist>
         <div class="task-table-wrap">
           <table class="task-table">
             <thead>
@@ -162,6 +164,15 @@
                 <option value="hourly">hourly</option>
                 <option value="daily">daily</option>
                 <option value="weekly">weekly</option>
+              </select>
+            </label>
+            <label class="field">retry defeats
+              <input id="taskRetryLimit" type="number" min="0" step="1">
+            </label>
+            <label class="field">after retry limit
+              <select id="taskRetryExhausted">
+                <option value="stop">stop queue</option>
+                <option value="skip">skip task</option>
               </select>
             </label>
             <label class="field route-json">custom lobby navigation actions
@@ -189,7 +200,7 @@
         </div>
         <div class="strategy-meta">
           <label class="field">name <input id="strategyName"></label>
-          <label class="field">map <input id="strategyMap"></label>
+          <label class="field">map <input id="strategyMap" list="mapCatalog"></label>
           <label class="field">stage <input id="strategyStage"></label>
           <label class="field">difficulty <input id="strategyDifficulty"></label>
           <label class="field">team <select id="strategyTeam"></select></label>
@@ -257,7 +268,7 @@
           <aside class="map-settings">
             <div class="section-title">map</div>
             <label class="field">mode <select id="positionMode"></select></label>
-            <label class="field">map <input id="positionMap"></label>
+            <label class="field">map <input id="positionMap" list="mapCatalog"></label>
             <label class="field">stage <select id="positionStage"></select></label>
             <label class="field">difficulty <select id="positionDifficulty"></select></label>
             <button id="loadMapImageBtn" class="button wide">load saved image</button>
@@ -294,7 +305,8 @@
           <section class="settings-card">
             <h3>camera</h3>
             <label class="field">zoom-in presses <input id="settingZoomIn" type="number" min="1" max="40"></label>
-            <label class="field">ground pitch drags <input id="settingPitchDrags" type="number" min="1" max="5"></label>
+            <label class="field">ground pitch steps <input id="settingPitchSteps" type="number" min="1" max="80"></label>
+            <label class="field">pitch strength <input id="settingPitchDelta" type="number" min="5" max="200"></label>
             <label class="field">zoom-out amount <input id="settingZoomOut" type="number" min="-50" max="-1"></label>
             <label class="field">settle time (ms) <input id="settingSettle" type="number" min="200" step="100"></label>
           </section>
@@ -330,6 +342,15 @@
             <label class="check-field"><input id="settingWebhookEnabled" type="checkbox"> enable webhook events</label>
             <label class="field">webhook url <input id="webhookUrl" type="password" placeholder="stored in macos keychain"></label>
             <label class="check-field"><input id="settingWebhookScreenshot" type="checkbox"> include result screenshot</label>
+            <div class="webhook-events">
+              <label><input type="checkbox" data-webhook-event="started"> start</label>
+              <label><input type="checkbox" data-webhook-event="victory"> victory</label>
+              <label><input type="checkbox" data-webhook-event="defeat"> defeat</label>
+              <label><input type="checkbox" data-webhook-event="stopped"> stop</label>
+              <label><input type="checkbox" data-webhook-event="error"> error</label>
+              <label><input type="checkbox" data-webhook-event="craft"> craft</label>
+              <label><input type="checkbox" data-webhook-event="challenge"> challenge</label>
+            </div>
             <div class="button-row">
               <button id="saveWebhookBtn" class="button">save to keychain</button>
               <button id="testWebhookBtn" class="button">send test</button>

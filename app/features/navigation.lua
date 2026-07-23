@@ -12,6 +12,7 @@ function Navigation.new(options)
     logger = options.logger,
     timer = nil,
     cancelled = false,
+    before_start = nil,
   }, Navigation)
 end
 
@@ -55,18 +56,6 @@ function Navigation:_runActions(actions, index, progress, callback)
 end
 
 function Navigation:_route(task)
-  if task.mode == "Story" and task.map == "King's Tomb" and task.stage == "Act 1"
-      and task.difficulty == "Mastery" then
-    local builtIn = Catalog.routes.kings_tomb_act_1_mastery
-    return {
-      lobby = builtIn.lobby,
-      team = task.team_actions or {},
-      afk_return_to_lobby = builtIn.afk_return_to_lobby,
-      start_private_party = builtIn.start_private_party,
-      repeat_stage = builtIn.repeat_stage,
-      start_game = builtIn.start_game,
-    }
-  end
   if type(task.navigation_actions) == "table" then
     return {
       lobby = task.navigation_actions,
@@ -111,6 +100,18 @@ function Navigation:_waitForPartyReady(route, progress, callback, startedAt)
       self:_startParty(route, progress, callback)
       return
     end
+    if result and result.state == "stage_select" then
+      local match = result.templates and result.templates.select_stage
+      local point = match and { x = match.center_x, y = match.center_y }
+        or Catalog.v4_navigation.select_stage
+      progress("navigation", "select stage is still visible; retrying")
+      local clicked, clickError = self.input:click(point, "retry select stage", function(success, helperError)
+        if not success then callback(nil, helperError) return end
+        self:_after(850, function() self:_waitForPartyReady(route, progress, callback, startedAt) end)
+      end)
+      if not clicked then callback(nil, clickError) end
+      return
+    end
     if detectError then self.logger:warn("party_ready_detection_failed", { error = detectError }) end
     self:_after(900, function() self:_waitForPartyReady(route, progress, callback, startedAt) end)
   end, "party ready")
@@ -141,6 +142,11 @@ function Navigation:_waitForBattle(route, progress, callback, startedAt, attempt
       callback(true)
       return
     end
+    if result.state == "unknown" and elapsed >= 1000 then
+      self.logger:info("battle_started_after_start_disappeared", { elapsed_ms = elapsed })
+      callback(true)
+      return
+    end
     if result.state == "stage_ready" and attempts < 4 then
       progress("navigation", "start game still visible; retrying")
       local clicked, clickError = self.input:click(route.start_game, "retry start game", function(success, helperError)
@@ -165,12 +171,24 @@ function Navigation:_waitForBattle(route, progress, callback, startedAt, attempt
 end
 
 function Navigation:_startGame(route, progress, callback)
-  progress("navigation", "starting stage")
-  local ok, err = self.input:click(route.start_game, "start game", function(success, clickError)
-    if not success then callback(nil, clickError) return end
-    self:_after(1200, function() self:_waitForBattle(route, progress, callback) end)
-  end)
-  if not ok then callback(nil, err) end
+  local function clickStart()
+    progress("navigation", "starting stage")
+    local ok, err = self.input:click(route.start_game, "start game", function(success, clickError)
+      if not success then callback(nil, clickError) return end
+      self:_after(1200, function() self:_waitForBattle(route, progress, callback) end)
+    end)
+    if not ok then callback(nil, err) end
+  end
+  if self.before_start then
+    local prepare = self.before_start
+    self.before_start = nil
+    prepare(function(prepared, prepareError)
+      if not prepared then callback(nil, prepareError) return end
+      clickStart()
+    end)
+    return
+  end
+  clickStart()
 end
 
 function Navigation:_waitForStageReady(route, progress, callback, startedAt)
@@ -208,14 +226,69 @@ function Navigation:_startParty(route, progress, callback)
   if not ok then callback(nil, err) end
 end
 
-function Navigation:_repeat(route, progress, callback)
+function Navigation:_clickRepeat(route, detection, progress, callback)
   progress("navigation", "repeating stage")
+  local match = detection and detection.templates and detection.templates.retry
   local point = route.repeat_stage or Catalog.results.repeat_stage
+  if match and match.center_x and match.center_y then
+    point = { x = match.center_x, y = match.center_y }
+  end
   local ok, err = self.input:click(point, "repeat stage", function(success, clickError)
     if not success then callback(nil, clickError) return end
     self:_after(1800, function() self:_waitForStageReady(route, progress, callback) end)
   end)
   if not ok then callback(nil, err) end
+end
+
+function Navigation:_waitForRepeatControl(route, progress, callback, startedAt, resultsOpened)
+  startedAt = startedAt or (hs.timer.secondsSinceEpoch() * 1000)
+  if (hs.timer.secondsSinceEpoch() * 1000) - startedAt >= 18000 then
+    callback(nil, "repeat stage did not become available")
+    return
+  end
+  progress("navigation", resultsOpened and "waiting for repeat stage" or "checking result screen")
+  local id, err = self.detector:detect(function(result, detectError)
+    if self.cancelled then return end
+    if not result then
+      if detectError then self.logger:warn("repeat_detection_failed", { error = detectError }) end
+      self:_after(700, function()
+        self:_waitForRepeatControl(route, progress, callback, startedAt, resultsOpened)
+      end)
+      return
+    end
+    if result.state == "victory" or result.state == "defeat" then
+      self:_clickRepeat(route, result, progress, callback)
+      return
+    end
+    if result.state == "finished_stage" and not resultsOpened then
+      progress("navigation", "opening game results")
+      local clicked, clickError = self.input:click(Catalog.results.open_results, "open game results", function(success, helperError)
+        if not success then callback(nil, helperError) return end
+        self:_after(700, function()
+          self:_waitForRepeatControl(route, progress, callback, startedAt, true)
+        end)
+      end)
+      if not clicked then callback(nil, clickError) end
+      return
+    end
+    if result.state == "stage_ready" then
+      self:_startGame(route, progress, callback)
+      return
+    end
+    self:_after(700, function()
+      self:_waitForRepeatControl(route, progress, callback, startedAt, resultsOpened)
+    end)
+  end, "repeat stage")
+  if not id then
+    if err then self.logger:warn("repeat_request_failed", { error = err }) end
+    self:_after(700, function()
+      self:_waitForRepeatControl(route, progress, callback, startedAt, resultsOpened)
+    end)
+  end
+end
+
+function Navigation:_repeat(route, progress, callback)
+  self:_waitForRepeatControl(route, progress, callback)
 end
 
 function Navigation:_waitForLobby(progress, callback, startedAt)
@@ -275,27 +348,26 @@ function Navigation:returnToLobby(progress, callback)
 end
 
 function Navigation:_fromFinishedStage(route, progress, callback)
-  progress("navigation", "opening game results")
-  local ok, err = self.input:click({ x = 408, y = 520 }, "open game results", function(success, clickError)
-    if not success then callback(nil, clickError) return end
-    self:_after(900, function() self:_repeat(route, progress, callback) end)
-  end)
-  if not ok then callback(nil, err) end
+  self:_repeat(route, progress, callback)
 end
 
 function Navigation:_fromAfkChamber(route, progress, callback)
   progress("navigation", "returning from the afk chamber")
   local ok, err = self.input:click(route.afk_return_to_lobby, "return from afk chamber to lobby", function(success, clickError)
     if not success then callback(nil, clickError) return end
-    self:_after(self.profile.navigation.lobby_load_wait_ms or 18000, function()
-      self:_fromLobby(route, progress, callback)
+    self:_after(900, function()
+      self:_waitForLobby(progress, function(lobbyReady, lobbyError)
+        if not lobbyReady then callback(nil, lobbyError) return end
+        self:_fromLobby(route, progress, callback)
+      end)
     end)
   end)
   if not ok then callback(nil, err) end
 end
 
-function Navigation:start(task, startMode, progress, callback)
+function Navigation:start(task, startMode, progress, callback, beforeStart)
   self.cancelled = false
+  self.before_start = beforeStart
   local route = self:_route(task)
   if not route then callback(nil, "no navigation route for " .. tostring(task.name)) return end
   local _, focusError = self.roblox:focus()
@@ -303,7 +375,9 @@ function Navigation:start(task, startMode, progress, callback)
 
   local function useMode(mode)
     if mode == "stage_ready" then self:_startGame(route, progress, callback) return end
+    if mode == "battle" then callback(true) return end
     if mode == "party_ready" then self:_startParty(route, progress, callback) return end
+    if mode == "stage_select" then self:_waitForPartyReady(route, progress, callback) return end
     if mode == "repeat" then self:_repeat(route, progress, callback) return end
     if mode == "finished_stage" then self:_fromFinishedStage(route, progress, callback) return end
     if mode == "afk_chamber" then self:_fromAfkChamber(route, progress, callback) return end
@@ -344,6 +418,7 @@ end
 
 function Navigation:stop()
   self.cancelled = true
+  self.before_start = nil
   if self.timer then self.timer:stop() self.timer = nil end
 end
 

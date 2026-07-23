@@ -12,6 +12,8 @@ local Challenges = require("app.features.challenges")
 local Webhooks = require("app.features.webhooks")
 local Navigation = require("app.features.navigation")
 local MapStore = require("app.features.map_store")
+local StrategyRunner = require("app.features.strategy_runner")
+local Automation = require("app.features.automation")
 local RobloxWindow = require("app.platform.roblox_window")
 local Catalog = require("app.config.catalog")
 
@@ -84,6 +86,17 @@ test("completed queue can restart without a task limit", function()
   assert(queue.index == 1 and queue.repetition == 0)
 end)
 
+test("same-stage repeat returns to lobby when the next task changes team", function()
+  local previous = {
+    mode = "Story", map = "School Grounds", stage = "Act 1", difficulty = "Normal", team = "1",
+  }
+  local nextTask = {
+    mode = "Story", map = "School Grounds", stage = "Act 1", difficulty = "Normal", team = "2",
+  }
+  assert(Automation._nextStartMode({}, previous, previous) == "repeat")
+  assert(Automation._nextStartMode({}, previous, nextTask) == "lobby")
+end)
+
 test("state transition validation", function()
   local machine = StateMachine.new()
   machine:transition("ATTACH_ROBLOX", "test")
@@ -125,6 +138,7 @@ test("profile schema accepts custom routes and crafting workflows", function()
         navigation_actions = {
           { type = "click", point = { x = 80, y = 390 }, wait_ms = 200 },
           { type = "drag", from = { x = 100, y = 500 }, to = { x = 700, y = 500 } },
+          { type = "scroll", point = { x = 400, y = 385 }, delta = -20 },
           { type = "key", key = "e" },
           { type = "wait", wait_ms = 100 },
         },
@@ -157,6 +171,32 @@ test("built-in navigation keeps task-level team actions", function()
   })
   assert(route ~= nil and #route.lobby > 0)
   assert(#route.team == 1 and route.team[1].key == "h")
+  assert(route.lobby[2].point.x == Catalog.v4_navigation.modes.Story.x)
+  assert(route.lobby[3].type == "scroll" and route.lobby[3].delta == -20)
+end)
+
+test("profile schema validates retry and webhook customization", function()
+  local profile = {
+    schema_version = 1,
+    reference_resolution = { w = 816, h = 638 },
+    tasks = {
+      {
+        name = "repeatable",
+        mode = "Story",
+        map = "School Grounds",
+        stage = "Act 1",
+        difficulty = "Normal",
+        repetitions = 1,
+        retry = { maximum_consecutive_failures = 3, on_exhausted = "skip" },
+      },
+    },
+    webhooks = { events = { "started", "victory", "defeat" } },
+  }
+  local ok, errors = Schema.validate(profile)
+  assert(ok == true and #errors == 0)
+  profile.tasks[1].retry.on_exhausted = "buy"
+  ok = Schema.validate(profile)
+  assert(ok == nil)
 end)
 
 test("v0.4 map image names cover story raid and expedition", function()
@@ -288,6 +328,131 @@ test("strategy rejects unsafe coordinates and dangling actions", function()
   }
   local ok, errors = Strategy.validate(strategy)
   assert(ok == nil and #errors >= 4)
+end)
+
+test("strategy runner confirms and closes unit menus like v0.4", function()
+  local scheduled = {}
+  local now = 0
+  _G.hs = {
+    timer = {
+      secondsSinceEpoch = function() return now end,
+      doAfter = function(_, callback)
+        table.insert(scheduled, callback)
+        return { stop = function() end }
+      end,
+    },
+  }
+  local seen = {}
+  local runner = StrategyRunner.new({
+    input = {
+      key = function(_, key, repeats)
+        table.insert(seen, "key:" .. key .. ":" .. tostring(repeats))
+        return true
+      end,
+      click = function(_, point, reason, callback)
+        table.insert(seen, "click:" .. reason .. ":" .. point.x .. "," .. point.y)
+        callback(true)
+        return true
+      end,
+    },
+    detector = {
+      detect = function(_, callback, _, context)
+        table.insert(seen, "detect:" .. tostring(context))
+        callback({ state = "unit_menu" })
+        return "request"
+      end,
+    },
+    logger = { info = function() end, error = function() end },
+  })
+  local completed
+  local started = runner:start({
+    schema_version = 1,
+    id = "confirmed",
+    name = "confirmed",
+    map = "King's Tomb",
+    stage = "Act 1",
+    difficulty = "Mastery",
+    team = "current",
+    reference_resolution = { w = 816, h = 638 },
+    actions = {
+      { id = "p1", type = "place", unit_slot = 1, x = 315, y = 455, at_ms = 0 },
+      { id = "a1", type = "auto_upgrade", placement_id = "p1", at_ms = 1 },
+    },
+  }, 0, function() end, function(ok) completed = ok end)
+  assert(started == true)
+  while #scheduled > 0 do
+    now = now + 1
+    table.remove(scheduled, 1)()
+  end
+  assert(completed == true)
+  local joined = table.concat(seen, "|")
+  assert(joined:match("key:1:1"))
+  assert(joined:match("click:place p1:315,455"))
+  assert(joined:match("detect:unit_menu"))
+  assert(joined:match("click:auto_upgrade p1:270,377"))
+  assert(joined:match("click:close unit menu:287,228"))
+  _G.hs = nil
+end)
+
+test("repeat flow opens results and uses the detected retry button", function()
+  local scheduled = {}
+  local now = 0
+  _G.hs = {
+    timer = {
+      secondsSinceEpoch = function() return now end,
+      doAfter = function(_, callback)
+        table.insert(scheduled, callback)
+        return { stop = function() end }
+      end,
+    },
+  }
+  local detections = {
+    { state = "finished_stage" },
+    {
+      state = "defeat",
+      templates = { retry = { center_x = 205, center_y = 471 } },
+    },
+    { state = "stage_ready" },
+    { state = "battle" },
+  }
+  local seen = {}
+  local navigation = Navigation.new({
+    input = {
+      click = function(_, point, reason, callback)
+        table.insert(seen, reason .. ":" .. point.x .. "," .. point.y)
+        callback(true)
+        return true
+      end,
+    },
+    roblox = { focus = function() return {} end },
+    detector = {
+      detect = function(_, callback)
+        callback(table.remove(detections, 1))
+        return "request"
+      end,
+    },
+    profile = { navigation = { load_timeout_ms = 10000, stage_start_timeout_ms = 10000 } },
+    logger = { warn = function() end, info = function() end },
+  })
+  local completed
+  navigation:start({
+    name = "king's tomb",
+    mode = "Story",
+    map = "King's Tomb",
+    stage = "Act 1",
+    difficulty = "Mastery",
+  }, "repeat", function() end, function(ok) completed = ok end)
+  while #scheduled > 0 do
+    now = now + 1
+    table.remove(scheduled, 1)()
+  end
+  assert(completed == true)
+  assert(table.concat(seen, "|") == table.concat({
+    "open game results:408,520",
+    "repeat stage:205,471",
+    "start game:408,193",
+  }, "|"))
+  _G.hs = nil
 end)
 
 test("auto craft is gated and quick craft is blocked", function()

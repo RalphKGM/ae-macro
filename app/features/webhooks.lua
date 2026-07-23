@@ -64,7 +64,10 @@ function Webhooks:_payload(event, fields)
   fields = fields or {}
   local title = "ae macro · " .. tostring(event)
   local lines = {}
-  for _, key in ipairs({ "task", "result", "duration", "runs", "victories", "defeats", "message" }) do
+  for _, key in ipairs({
+    "task", "result", "duration", "attempt", "task_progress",
+    "runs", "victories", "defeats", "rewards", "message",
+  }) do
     if fields[key] ~= nil then table.insert(lines, key .. ": " .. tostring(fields[key])) end
   end
   return string.format('{"username":"ae macro","embeds":[{"title":"%s","description":"%s","color":%d}]}',

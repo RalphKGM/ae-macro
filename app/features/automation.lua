@@ -12,6 +12,7 @@ local function sameStage(left, right)
     and left.map == right.map
     and left.stage == right.stage
     and left.difficulty == right.difficulty
+    and left.team == right.team
 end
 
 function Automation.new(options)
@@ -26,6 +27,7 @@ function Automation.new(options)
     camera = options.camera,
     runner = options.runner,
     watcher = options.watcher,
+    rewards = options.rewards,
     crafting = options.crafting,
     challenges = options.challenges,
     webhooks = options.webhooks,
@@ -122,8 +124,12 @@ function Automation:_loadStrategy(task)
 end
 
 function Automation:_beginBattle(task, startMode, challengeChecked)
+  local monitorOnly = startMode == "monitor"
+  -- Monitor mode is an explicit recovery action for a battle the user has
+  -- already inspected. It never replays navigation, camera, or strategy input.
+  local navigationMode = monitorOnly and "battle" or startMode
   local challengeKind = self.challenges:taskKind(task)
-  if challengeKind and self.challenges.config.enabled and startMode == "lobby" and not challengeChecked then
+  if challengeKind and self.challenges.config.enabled and navigationMode == "lobby" and not challengeChecked then
     self.challenges:checkFromLobby(
       challengeKind,
       function(area, message) self:_progress(area, message) end,
@@ -137,13 +143,31 @@ function Automation:_beginBattle(task, startMode, challengeChecked)
           self:_continue(task, { already_in_lobby = true })
           return
         end
-        self:_beginBattle(task, startMode, true)
+        self:_beginBattle(task, navigationMode, true)
       end
     )
     return
   end
   self:_progress("run", "starting " .. task.name)
-  self.navigation:start(task, startMode, function(area, message)
+  local cameraPrepared = monitorOnly
+  local cameraResult = nil
+  local function prepareCamera(done)
+    if cameraPrepared or not self.profile.runtime.auto_camera then
+      cameraPrepared = true
+      done(true)
+      return
+    end
+    self.camera:setup(task, function(area, message) self:_progress(area, message) end, function(result, cameraError)
+      if not result then done(nil, cameraError) return end
+      cameraPrepared = true
+      cameraResult = result
+      self:_event("camera_ready", {
+        path = result.output_path, task = task.name, reused_map = result.reused_map,
+      })
+      done(true)
+    end)
+  end
+  self.navigation:start(task, navigationMode, function(area, message)
     self:_progress(area, message)
   end, function(success, navigationError)
     if not self.active then return end
@@ -161,6 +185,14 @@ function Automation:_beginBattle(task, startMode, challengeChecked)
         if resultError then self:_fail(resultError) return end
         self:_handleResult(result, detection)
       end)
+      if monitorOnly then
+        self:_event("strategy_skipped", {
+          task = task.name,
+          message = "monitoring an existing battle without replaying placements",
+        })
+        self.machine:transition("IN_BATTLE", "monitoring existing battle")
+        return
+      end
       local started, runnerError = self.runner:start(
         self.current_strategy,
         self.battle_started_at,
@@ -174,16 +206,15 @@ function Automation:_beginBattle(task, startMode, challengeChecked)
       self.machine:transition("IN_BATTLE", "strategy running")
     end
 
-    if self.profile.runtime.auto_camera then
-      self.camera:setup(task, function(area, message) self:_progress(area, message) end, function(result, cameraError)
-        if not result then self:_fail(cameraError) return end
-        self:_event("camera_ready", { path = result.output_path, task = task.name, reused_map = result.reused_map })
+    if cameraPrepared or not self.profile.runtime.auto_camera then
+      execute()
+    else
+      prepareCamera(function(prepared, cameraError)
+        if not prepared then self:_fail(cameraError) return end
         execute()
       end)
-    else
-      execute()
     end
-  end)
+  end, prepareCamera)
 end
 
 function Automation:_nextStartMode(previous, nextTask)
@@ -304,27 +335,33 @@ function Automation:_craftThenContinue(previousTask)
   end)
 end
 
-function Automation:_handleResult(result, detection)
+function Automation:_finishResult(result, detection, rewards, duration)
   if not self.active then return end
   local task = self.queue:current()
-  self.runner:stop("result detected")
-  self.watcher:stop()
-  self.machine:transition("RESULTS", result)
-  local duration = self.stats:record(result)
   local screenshot = detection and detection.image_path
+  rewards = rewards or { items = {}, summary = "rewards unreadable" }
+  local attempt = self.stats.runs
+  local taskProgress = tostring((self.queue.repetition or 0) + 1)
+  if task and not task.infinite then taskProgress = taskProgress .. "/" .. tostring(task.repetitions or 1) end
   self:_event("result", {
     result = result,
     task = task and task.name,
     duration = duration,
     screenshot = screenshot,
+    rewards = rewards,
+    attempt = attempt,
+    task_progress = taskProgress,
   })
   self.webhooks:send(result, {
     task = task and task.name,
     result = result,
     duration = duration .. "s",
+    attempt = attempt,
+    task_progress = taskProgress,
     runs = self.stats.runs,
     victories = self.stats.victories,
     defeats = self.stats.defeats,
+    rewards = rewards.summary,
   }, screenshot)
 
   if result == "victory" then
@@ -362,6 +399,24 @@ function Automation:_handleResult(result, detection)
     return
   end
   self:_fail("retry limit reached")
+end
+
+function Automation:_handleResult(result, detection)
+  if not self.active then return end
+  self.runner:stop("result detected")
+  self.watcher:stop()
+  self.machine:transition("RESULTS", result)
+  local duration = self.stats:record(result)
+  local screenshot = detection and detection.image_path
+  if not self.rewards then
+    self:_finishResult(result, detection, { items = {}, summary = "rewards unreadable" }, duration)
+    return
+  end
+  self:_progress("results", "reading rewards")
+  self.rewards:read(screenshot, function(rewards)
+    if not self.active then return end
+    self:_finishResult(result, detection, rewards, duration)
+  end)
 end
 
 function Automation:start(options)

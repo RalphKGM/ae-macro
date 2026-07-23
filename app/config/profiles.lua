@@ -24,13 +24,15 @@ function Profiles.defaults(profile)
   if profile.runtime.queue_start_over == nil then profile.runtime.queue_start_over = false end
   profile.camera = profile.camera or {
     zoom_in_presses = 18,
-    pitch_drags = 2,
-    pitch_from = { x = 408, y = 540 },
-    pitch_to = { x = 408, y = 80 },
-    pitch_duration_ms = 900,
+    pitch_origin = { x = 408, y = 319 },
+    pitch_steps = 30,
+    pitch_delta_y = 100,
     zoom_out_delta = -20,
     settle_ms = 1800,
   }
+  if profile.camera.pitch_origin == nil then profile.camera.pitch_origin = { x = 408, y = 319 } end
+  if profile.camera.pitch_steps == nil then profile.camera.pitch_steps = 30 end
+  if profile.camera.pitch_delta_y == nil then profile.camera.pitch_delta_y = 100 end
   profile.teams = profile.teams or {
     { id = "current", name = "current equipped team" },
     { id = "1", name = "team 1" },

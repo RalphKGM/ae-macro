@@ -104,11 +104,17 @@ function Input:_ready()
   if not window then return nil, err end
   if not self.roblox:isFrontmost(window) then
     if not self.session_active then return nil, "Roblox is not frontmost" end
-    local focused, focusError = self.roblox:focus()
-    if not focused then return nil, focusError end
-    hs.timer.usleep(120000)
-    window = focused
-    if not self.roblox:isFrontmost(window) then return nil, "Roblox could not be focused" end
+    local focusError
+    for attempt = 1, 8 do
+      local focused
+      focused, focusError = self.roblox:focus()
+      if not focused then return nil, focusError end
+      window = focused
+      hs.timer.usleep(125000)
+      if self.roblox:isFrontmost(window) then break end
+      self.logger:warn("roblox_focus_retry", { attempt = attempt, label = self.session_label })
+    end
+    if not self.roblox:isFrontmost(window) then return nil, "Roblox could not be focused after 8 attempts" end
     self.logger:info("roblox_refocused_for_input", { label = self.session_label })
   end
   return window
@@ -224,6 +230,34 @@ function Input:scroll(delta, reason, callback)
     return nil, "native camera helper is missing; run scripts/setup.sh"
   end
   return self:_task(self.native_binary, { "scroll", tostring(math.floor(delta or 0)) }, reason, callback)
+end
+
+function Input:zoom(key, wheelDelta, durationMs, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  if not self.native_binary or not hs.fs.attributes(self.native_binary) then
+    return nil, "native camera helper is missing; run scripts/setup.sh"
+  end
+  return self:_task(self.native_binary, {
+    "zoom", tostring(key), tostring(math.floor(wheelDelta or 0)), tostring(math.floor(durationMs or 1600)),
+  }, reason, callback)
+end
+
+function Input:pitchDown(point, steps, deltaY, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  if not self.native_binary or not hs.fs.attributes(self.native_binary) then
+    return nil, "native camera helper is missing; run scripts/setup.sh"
+  end
+  local screenPoint, pointError = self:referencePoint(point)
+  if not screenPoint then return nil, pointError end
+  return self:_task(self.native_binary, {
+    "pitch-down",
+    tostring(math.floor(screenPoint.x + 0.5)),
+    tostring(math.floor(screenPoint.y + 0.5)),
+    tostring(math.floor(steps or 30)),
+    tostring(math.floor(deltaY or 100)),
+  }, reason, callback)
 end
 
 function Input:scrollAt(point, delta, reason, callback)

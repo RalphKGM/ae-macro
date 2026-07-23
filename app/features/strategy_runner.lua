@@ -34,6 +34,7 @@ end
 function StrategyRunner.new(options)
   return setmetatable({
     input = options.input,
+    detector = options.detector,
     logger = options.logger,
     timer = nil,
     actions = {},
@@ -75,41 +76,112 @@ function StrategyRunner:_placement(action)
   return self.placements[action.placement_id]
 end
 
-function StrategyRunner:_place(action, callback)
-  local slot = Catalog.unit_bar[action.unit_slot]
-  if not slot then callback(nil, "unit slot is outside 1-6") return end
-  self:_clickThen(slot, "select unit slot " .. tostring(action.unit_slot), 360, function(selected, selectError)
+function StrategyRunner:_unitMenuOpen(callback)
+  if not self.detector then callback(nil, "unit-menu detection is unavailable") return end
+  local id, err = self.detector:detect(function(result, detectError)
+    if not result then callback(nil, detectError) return end
+    callback(result.state == "unit_menu")
+  end, "unit menu", "unit_menu")
+  if not id then callback(nil, err) end
+end
+
+function StrategyRunner:_closeUnitMenu(callback)
+  self:_unitMenuOpen(function(opened, detectError)
+    if opened == nil then callback(nil, detectError) return end
+    if not opened then callback(true) return end
+    self:_clickThen(Catalog.unit_panel.close, "close unit menu", 180, callback)
+  end)
+end
+
+function StrategyRunner:_selectPlacedUnit(placement, reason, callback, attempts)
+  attempts = attempts or 2
+  self:_clickThen({ x = placement.x, y = placement.y }, reason, 350, function(selected, selectError)
     if not selected then callback(nil, selectError) return end
-    self:_clickThen({ x = action.x, y = action.y }, "place " .. tostring(action.id), 420, function(placed, placeError)
-      if placed then self.placements[action.id] = action end
-      callback(placed, placeError)
+    self:_unitMenuOpen(function(opened, detectError)
+      if opened then callback(true) return end
+      if attempts > 1 then
+        self:_after(220, function()
+          self:_selectPlacedUnit(placement, reason, callback, attempts - 1)
+        end)
+        return
+      end
+      callback(nil, detectError or ("unit menu did not open for " .. tostring(placement.id)))
     end)
   end)
+end
+
+function StrategyRunner:_place(action, callback)
+  if not Catalog.unit_bar[action.unit_slot] then callback(nil, "unit slot is outside 1-6") return end
+  local function attempt(remaining)
+    local selected, selectError = self.input:key(tostring(action.unit_slot), 1, 0)
+    if not selected then callback(nil, selectError) return end
+    self:_after(320, function()
+      self:_clickThen({ x = action.x, y = action.y }, "place " .. tostring(action.id), 400, function(clicked, clickError)
+        if not clicked then callback(nil, clickError) return end
+        self:_unitMenuOpen(function(opened, detectError)
+          if opened then
+            self.placements[action.id] = action
+            self:_closeUnitMenu(callback)
+            return
+          end
+          if remaining > 1 then
+            self:_after(250, function() attempt(remaining - 1) end)
+            return
+          end
+          callback(nil, detectError or ("placement was not confirmed: " .. tostring(action.id)))
+        end)
+      end)
+    end)
+  end
+  attempt(2)
 end
 
 function StrategyRunner:_unitPanelAction(action, control, callback)
   local placement = self:_placement(action)
   if not placement then callback(nil, "placement not found for " .. tostring(action.id)) return end
-  self:_clickThen({ x = placement.x, y = placement.y }, "select placed unit " .. tostring(placement.id), 350, function(selected, selectError)
+  self:_selectPlacedUnit(placement, "select placed unit " .. tostring(placement.id), function(selected, selectError)
     if not selected then callback(nil, selectError) return end
-    self:_clickThen(control, action.type .. " " .. tostring(placement.id), 380, callback)
+    if action.type == "sell" then
+      local sold, sellError = self.input:key("x", 1, 0)
+      callback(sold, sellError)
+      return
+    end
+    if action.type == "target" then
+      local presses = {
+        first = 0, last = 1, closest = 2, strongest = 3,
+        weakest = 4, shielded = 5, flying = 5, fastest = 6, none = 7,
+      }
+      local count = presses[tostring(action.mode or "first"):lower()] or 0
+      if count > 0 then
+        local changed, targetError = self.input:key("r", count, 120)
+        if not changed then callback(nil, targetError) return end
+      end
+      self:_closeUnitMenu(callback)
+      return
+    end
+    self:_clickThen(control, action.type .. " " .. tostring(placement.id), 250, function(applied, applyError)
+      if not applied then callback(nil, applyError) return end
+      self:_closeUnitMenu(callback)
+    end)
   end)
 end
 
 function StrategyRunner:_upgrade(action, callback)
-  local levels = action.levels == "max" and 12 or math.max(1, tonumber(action.levels) or 1)
   local placement = self:_placement(action)
   if not placement then callback(nil, "upgrade placement was not found") return end
-  self:_clickThen({ x = placement.x, y = placement.y }, "select unit for upgrade", 350, function(selected, selectError)
+  self:_selectPlacedUnit(placement, "select unit for upgrade", function(selected, selectError)
     if not selected then callback(nil, selectError) return end
-    local function clickLevel(remaining)
-      if remaining <= 0 then callback(true) return end
-      self:_clickThen(Catalog.unit_panel.upgrade, "upgrade unit", 420, function(upgraded, upgradeError)
+    if action.levels == "max" then
+      self:_clickThen(Catalog.unit_panel.auto_upgrade, "enable auto upgrade", 250, function(upgraded, upgradeError)
         if not upgraded then callback(nil, upgradeError) return end
-        clickLevel(remaining - 1)
+        self:_closeUnitMenu(callback)
       end)
+      return
     end
-    clickLevel(levels)
+    local levels = math.max(1, tonumber(action.levels) or 1)
+    local upgraded, upgradeError = self.input:key("t", levels, 280)
+    if not upgraded then callback(nil, upgradeError) return end
+    self:_after(180, function() self:_closeUnitMenu(callback) end)
   end)
 end
 

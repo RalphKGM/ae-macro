@@ -40,6 +40,11 @@ local function validateActions(errors, actions, path, reference)
       end
     elseif action.type == "key" then
       if type(action.key) ~= "string" or action.key == "" then table.insert(errors, prefix .. ".key is required") end
+    elseif action.type == "scroll" then
+      if action.point ~= nil and not validPoint(action.point, reference) then
+        table.insert(errors, prefix .. ".point must be inside the reference canvas")
+      end
+      if type(action.delta) ~= "number" then table.insert(errors, prefix .. ".delta must be number") end
     elseif action.type ~= "wait" then
       table.insert(errors, prefix .. ".type is unsupported")
     end
@@ -77,6 +82,19 @@ function Schema.validate(profile)
       if task.mode == "Challenge" and task.challenge_kind ~= nil and type(task.challenge_kind) ~= "string" then
         table.insert(errors, prefix .. ".challenge_kind must be string")
       end
+      if task.retry ~= nil then
+        if type(task.retry) ~= "table" then
+          table.insert(errors, prefix .. ".retry must be table")
+        else
+          local maximum = task.retry.maximum_consecutive_failures
+          if type(maximum) ~= "number" or maximum < 0 or maximum % 1 ~= 0 then
+            table.insert(errors, prefix .. ".retry.maximum_consecutive_failures must be a non-negative integer")
+          end
+          if task.retry.on_exhausted ~= "stop" and task.retry.on_exhausted ~= "skip" then
+            table.insert(errors, prefix .. ".retry.on_exhausted must be stop or skip")
+          end
+        end
+      end
     end
   end
   if profile.runtime ~= nil and type(profile.runtime) ~= "table" then table.insert(errors, "runtime must be table") end
@@ -84,6 +102,19 @@ function Schema.validate(profile)
   if profile.crafting ~= nil and type(profile.crafting) ~= "table" then table.insert(errors, "crafting must be table") end
   if profile.challenges ~= nil and type(profile.challenges) ~= "table" then table.insert(errors, "challenges must be table") end
   if profile.webhooks ~= nil and type(profile.webhooks) ~= "table" then table.insert(errors, "webhooks must be table") end
+  if type(profile.webhooks) == "table" and profile.webhooks.events ~= nil then
+    local supported = {
+      started = true, victory = true, defeat = true, stopped = true,
+      error = true, craft = true, challenge = true,
+    }
+    if type(profile.webhooks.events) ~= "table" then
+      table.insert(errors, "webhooks.events must be table")
+    else
+      for index, event in ipairs(profile.webhooks.events) do
+        if not supported[event] then table.insert(errors, "webhooks.events[" .. index .. "] is unsupported") end
+      end
+    end
+  end
   if type(profile.crafting) == "table" and profile.crafting.workflow ~= nil then
     validateActions(errors, profile.crafting.workflow, "crafting.workflow", profile.reference_resolution)
   end

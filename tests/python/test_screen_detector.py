@@ -61,6 +61,7 @@ def test_party_screen_beats_finished_stage_false_positive():
         ("lobby-overlay.png", "lobby_overlay"),
         ("mode-select.png", "mode_select"),
         ("party-ready-live.png", "party_ready"),
+        ("stage-select-live.png", "stage_select"),
     ],
 )
 def test_v4_templates_identify_live_navigation_checkpoints(filename: str, expected: str):
@@ -72,7 +73,21 @@ def test_v4_templates_identify_live_navigation_checkpoints(filename: str, expect
 
 
 def test_result_context_rejects_lobby_and_mode_screens():
-    for filename in ("lobby-overlay.png", "mode-select.png", "party-ready-live.png"):
+    for filename in (
+        "lobby-overlay.png",
+        "mode-select.png",
+        "party-ready-live.png",
+        "stage-select-live.png",
+    ):
         image = cv2.imread(str(FIXTURES / filename))
         result = classify_screen(image, templates_dir=TEMPLATES, context="result")
         assert result["state"] == "unknown"
+
+
+def test_unit_menu_context_uses_the_v4_upgrade_strip_vote():
+    image = np.zeros((638, 816, 3), dtype=np.uint8)
+    for index in range(8):
+        image[386, 158 + index * 9] = (31, 31, 31)
+    result = classify_screen(image, context="unit_menu")
+    assert result["state"] == "unit_menu"
+    assert result["unit_menu_vote"]["grey"] == 8

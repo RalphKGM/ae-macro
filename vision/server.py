@@ -15,6 +15,7 @@ import cv2
 from .challenge_counter import classify_availability, counters_from_text, load_glyph_templates, recognize_counter
 from .diagnostics import annotated_match, image_metrics, write_json
 from .matching import best_template_match, normalize, read_image, sample_color
+from .rewards import read_rewards
 from .screen_detector import classify_screen
 
 
@@ -48,6 +49,8 @@ class VisionService:
             return self.challenge_counter(payload)
         if operation == "ocr_text":
             return self.ocr_text(payload)
+        if operation == "read_rewards":
+            return self.read_rewards(payload)
         if operation == "classify_screen":
             return self.classify_screen(payload)
         raise ValueError(f"unsupported operation: {operation}")
@@ -163,6 +166,11 @@ class VisionService:
         result["minimum_confidence"] = min(confidences) if confidences else 0.0
         result["image_path"] = str(image_path)
         return result
+
+    def read_rewards(self, payload: dict[str, Any]) -> dict[str, Any]:
+        image, image_path = self.image_for(payload)
+        helper = self.safe_path("runtime/bin/ae-input", must_exist=True)
+        return {"image_path": str(image_path), **read_rewards(image, helper)}
 
     def classify_screen(self, payload: dict[str, Any]) -> dict[str, Any]:
         image, image_path = self.image_for(payload)

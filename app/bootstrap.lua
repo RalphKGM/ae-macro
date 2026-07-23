@@ -17,6 +17,7 @@ local Camera = require("app.features.camera")
 local Navigation = require("app.features.navigation")
 local StrategyRunner = require("app.features.strategy_runner")
 local ResultWatcher = require("app.features.result_watcher")
+local RewardReader = require("app.features.reward_reader")
 local Webhooks = require("app.features.webhooks")
 local Challenges = require("app.features.challenges")
 local Crafting = require("app.features.crafting")
@@ -30,9 +31,22 @@ local function bind(spec, fn)
   return hs.hotkey.bind(spec.modifiers, spec.key, fn)
 end
 
-local function token()
+local function token(root)
+  local path = root .. "/runtime/vision.token"
+  local existing = io.open(path, "r")
+  if existing then
+    local value = (existing:read("*a") or ""):gsub("[^%w]", "")
+    existing:close()
+    if #value >= 32 then return value end
+  end
   local output = hs.execute("/usr/bin/uuidgen", true) or ""
-  return output:gsub("[^%w]", "") .. tostring(math.floor(hs.timer.secondsSinceEpoch() * 1000))
+  local value = output:gsub("[^%w]", "") .. tostring(math.floor(hs.timer.secondsSinceEpoch() * 1000))
+  local temporary = path .. ".tmp"
+  local file = assert(io.open(temporary, "w"))
+  file:write(value)
+  file:close()
+  assert(os.rename(temporary, path))
+  return value
 end
 
 function Bootstrap.new(options)
@@ -79,7 +93,7 @@ function Bootstrap:start()
     root = self.root,
     python = python,
     port = profile.vision.port,
-    token = token(),
+    token = token(self.root),
     logger = self.logger,
   })
   self.calibration = Calibration.new({
@@ -102,10 +116,15 @@ function Bootstrap:start()
     input = self.input, roblox = self.roblox, detector = self.detector,
     profile = profile, logger = self.logger,
   })
-  self.runner = StrategyRunner.new({ input = self.input, logger = self.logger })
+  self.runner = StrategyRunner.new({
+    input = self.input, detector = self.detector, logger = self.logger,
+  })
   self.resultWatcher = ResultWatcher.new({
     detector = self.detector, logger = self.logger,
     timeout_ms = profile.navigation.result_timeout_ms,
+  })
+  self.rewardReader = RewardReader.new({
+    vision = self.vision, logger = self.logger,
   })
   self.webhooks = Webhooks.new({
     config = profile.webhooks, logger = self.logger, capture = self.capture,
@@ -131,6 +150,7 @@ function Bootstrap:start()
     root = self.root, profile = profile, strategyStore = self.strategyStore,
     input = self.input, roblox = self.roblox, navigation = self.navigation,
     camera = self.camera, runner = self.runner, watcher = self.resultWatcher,
+    rewards = self.rewardReader,
     crafting = self.crafting, challenges = self.challenges, webhooks = self.webhooks,
     logger = self.logger, machine = self.machine, checkpoint = checkpoint,
   })
@@ -225,7 +245,7 @@ function Bootstrap:status()
     input_armed = self.input and self.input:isArmed() or false,
     accessibility = permissionStatus.accessibility,
     screen_recording = permissionStatus.screen_recording,
-    vision_connected = self.vision and self.vision.socket and self.vision.socket:connected() or false,
+    vision_connected = self.vision and self.vision:isConnected() or false,
     roblox_window_found = window ~= nil,
     roblox_window_error = windowError,
     state = self.machine and self.machine.state or "UNINITIALIZED",

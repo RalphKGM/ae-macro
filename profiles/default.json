@@ -30,16 +30,12 @@
   },
   "camera": {
     "zoom_in_presses": 18,
-    "pitch_drags": 2,
-    "pitch_from": {
+    "pitch_origin": {
       "x": 408,
-      "y": 540
+      "y": 319
     },
-    "pitch_to": {
-      "x": 408,
-      "y": 80
-    },
-    "pitch_duration_ms": 900,
+    "pitch_steps": 30,
+    "pitch_delta_y": 100,
     "zoom_out_delta": -20,
     "settle_ms": 1800
   },
@@ -149,6 +145,22 @@
       "infinite": false,
       "retry": {
         "maximum_consecutive_failures": 2,
+        "on_exhausted": "stop"
+      }
+    },
+    {
+      "enabled": true,
+      "name": "school grounds act 1 normal test",
+      "mode": "Story",
+      "map": "School Grounds",
+      "stage": "Act 1",
+      "difficulty": "Normal",
+      "team": "current",
+      "strategy": "school-grounds-act-1-normal",
+      "repetitions": 1,
+      "infinite": false,
+      "retry": {
+        "maximum_consecutive_failures": 1,
         "on_exhausted": "stop"
       }
     }

@@ -88,6 +88,9 @@ def _template_regions(image: np.ndarray, templates_dir: Path | None) -> dict[str
     matches["start_game"] = _match(
         image, templates_dir, "start_game.png", roi={"x": 245, "y": 75, "w": 326, "h": 210}
     )
+    matches["select_stage"] = _match(
+        image, templates_dir, "select_stage.png", roi={"x": 100, "y": 405, "w": 500, "h": 125}
+    )
     matches["retry"] = _match(
         image, templates_dir, "retry.png", roi={"x": 70, "y": 410, "w": 300, "h": 145}
     )
@@ -115,6 +118,18 @@ def _result_color_vote(image: np.ndarray) -> tuple[int, int]:
     return blue, red
 
 
+def _unit_menu_vote(image: np.ndarray) -> tuple[int, int]:
+    """Mirror v0.4's fixed upgrade-strip check for the selected-unit panel."""
+    grey = green = 0
+    for x in range(158, 222, 9):
+        b, g, r = (int(value) for value in image[386, x])
+        if abs(r - 31) < 16 and abs(g - 31) < 16 and abs(b - 31) < 16:
+            grey += 1
+        elif g >= 90 and g > r + 20 and g > b + 20:
+            green += 1
+    return grey, green
+
+
 def classify_screen(
     image: np.ndarray,
     *,
@@ -124,8 +139,32 @@ def classify_screen(
     if image.shape[1] != REFERENCE_WIDTH or image.shape[0] != REFERENCE_HEIGHT:
         image = cv2.resize(image, (REFERENCE_WIDTH, REFERENCE_HEIGHT), interpolation=cv2.INTER_AREA)
 
+    if context == "unit_menu":
+        grey, green = _unit_menu_vote(image)
+        opened = grey >= 4 or green >= 4
+        return {
+            "state": "unit_menu" if opened else "unknown",
+            "confidence": max(grey, green) / 8,
+            "unit_menu_vote": {"grey": grey, "green": green},
+        }
+
     template_root = Path(templates_dir) if templates_dir else None
     templates = _template_regions(image, template_root)
+    stage_select_is_present = (
+        _matched(templates["select_stage"], 0.88)
+        and _near(templates["select_stage"], 260, 468, 55)
+    )
+
+    # The Select Stage button can resemble the result-screen controls. Navigation
+    # needs this checkpoint before result inference; the result watcher uses its
+    # dedicated context and therefore deliberately skips this early return.
+    if context != "result" and stage_select_is_present:
+        return {
+            "state": "stage_select",
+            "confidence": templates["select_stage"]["score"],
+            "templates": templates,
+        }
+
     retry_is_result = _matched(templates["retry"], 0.89) and _near(templates["retry"], 210, 472, 24)
     party_is_result = _matched(templates["view_party"], 0.89) and _near(templates["view_party"], 415, 468, 42)
     result_controls = max(
@@ -180,9 +219,9 @@ def classify_screen(
 
     if (
         _matched(templates["invite_players"], 0.85)
-        and _near(templates["invite_players"], 624, 612, 34)
+        and _near(templates["invite_players"], 624, 612, 18)
         and _matched(templates["join_party"], 0.85)
-        and _near(templates["join_party"], 746, 609, 34)
+        and _near(templates["join_party"], 746, 609, 18)
     ):
         return {
             "state": "mode_select",
@@ -206,7 +245,7 @@ def classify_screen(
         "result_header": _ratios(_roi(image, (90, 145, 720, 215))),
         "start_game": _ratios(_roi(image, (300, 165, 515, 215))),
         "repeat_button": _ratios(_roi(image, (110, 445, 310, 500))),
-        "game_results": _ratios(_roi(image, (345, 490, 470, 545))),
+        "game_results": _ratios(_roi(image, (345, 495, 470, 532))),
         "unit_cards": _ratios(_roi(image, (230, 535, 590, 625))),
         "lobby_modal_close": _ratios(_roi(image, (655, 140, 710, 205))),
     }
@@ -261,8 +300,8 @@ def classify_screen(
         return {"state": "defeat", "confidence": min(1.0, header["red"] * 4 + repeat), "regions": regions}
     if regions["start_game"]["green"] > 0.2:
         return {"state": "stage_ready", "confidence": min(1.0, regions["start_game"]["green"] * 2.5), "regions": regions}
-    if regions["game_results"]["yellow"] > 0.1 and regions["repeat_button"]["yellow"] > 0.08:
-        confidence = regions["game_results"]["yellow"] * 3 + regions["repeat_button"]["yellow"] * 2
+    if regions["game_results"]["yellow"] > 0.16 and regions["game_results"]["red"] > 0.02:
+        confidence = regions["game_results"]["yellow"] * 3 + regions["repeat_button"]["yellow"]
         return {"state": "finished_stage", "confidence": min(1.0, confidence), "regions": regions}
     if regions["unit_cards"]["yellow"] > 0.04:
         return {"state": "battle", "confidence": min(0.85, regions["unit_cards"]["yellow"] * 5), "regions": regions}

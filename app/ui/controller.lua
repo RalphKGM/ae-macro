@@ -225,16 +225,25 @@ function Controller:_startDockInputForwarding()
     local eventType = event:getType()
     local flags = event:getFlags()
     local tap = self.dockInputTap
-    tap:stop()
-    local focused = self.roblox:focus()
-    if not focused then
-      hs.timer.doAfter(0.05, function() if self.dockInputTap == tap then tap:start() end end)
-      return true
-    end
-    hs.timer.usleep(30000)
-    hs.eventtap.event.newMouseEvent(eventType, point):setFlags(flags):post()
-    self.logger:info("dock_input_forwarded", { x = point.x, y = point.y, event_type = eventType })
-    hs.timer.doAfter(0.05, function() if self.dockInputTap == tap then tap:start() end end)
+    -- Accessibility/window calls can deadlock a synchronous event-tap callback.
+    -- Swallow the activating mouse-down, then focus Roblox and replay it once
+    -- the callback has returned. The real drag/mouse-up continues to Roblox.
+    hs.timer.doAfter(0, function()
+      if self.dockInputTap ~= tap then return end
+      tap:stop()
+      local focused = self.roblox:focus()
+      if focused then
+        hs.eventtap.event.newMouseEvent(eventType, point):setFlags(flags):post()
+        self.logger:info("dock_input_forwarded", {
+          x = point.x, y = point.y, event_type = eventType,
+        })
+      else
+        self:_send("dock_status", { docked = false, message = "could not focus roblox" })
+      end
+      hs.timer.doAfter(0.06, function()
+        if self.dockInputTap == tap then tap:start() end
+      end)
+    end)
     return true
   end)
   self.dockInputTap:start()

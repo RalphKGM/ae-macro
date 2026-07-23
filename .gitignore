@@ -9,6 +9,7 @@ runtime/logs/*
 runtime/checkpoint.json
 runtime/challenges.json
 runtime/challenges-*.png
+runtime/vision.token
 runtime/bin/
 assets/maps/v4/*.png
 !runtime/captures/.gitkeep

@@ -21,12 +21,12 @@ Catalog.unit_bar = {
 }
 
 Catalog.unit_panel = {
-  upgrade = { x = 194, y = 389 },
-  auto_upgrade = { x = 269, y = 389 },
+  upgrade = { x = 194, y = 378 },
+  auto_upgrade = { x = 270, y = 377 },
   ability = { x = 137, y = 355 },
-  priority = { x = 58, y = 389 },
-  sell = { x = 116, y = 389 },
-  close = { x = 287, y = 240 },
+  priority = { x = 55, y = 378 },
+  sell = { x = 113, y = 378 },
+  close = { x = 287, y = 228 },
 }
 
 Catalog.routes = {
@@ -164,6 +164,7 @@ function Catalog.routeFor(task)
 end
 
 Catalog.results = {
+  open_results = { x = 408, y = 520 },
   repeat_stage = { x = 210, y = 472 },
   return_to_lobby = { x = 488, y = 472 },
   confirm_return_to_lobby = { x = 348, y = 342 },

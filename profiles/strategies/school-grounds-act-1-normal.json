@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "school-grounds-act-1-normal",
+  "name": "school grounds act 1 normal",
+  "map": "School Grounds",
+  "stage": "Act 1",
+  "difficulty": "Normal",
+  "team": "current",
+  "reference_resolution": {
+    "w": 816,
+    "h": 638
+  },
+  "actions": [
+    {
+      "id": "slot-2-1",
+      "type": "place",
+      "unit_slot": 2,
+      "x": 366,
+      "y": 329,
+      "at_ms": 5000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "slot-2-1-auto",
+      "type": "auto_upgrade",
+      "placement_id": "slot-2-1",
+      "at_ms": 8000
+    },
+    {
+      "id": "slot-1-1",
+      "type": "place",
+      "unit_slot": 1,
+      "x": 417,
+      "y": 307,
+      "at_ms": 12000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "slot-1-1-auto",
+      "type": "auto_upgrade",
+      "placement_id": "slot-1-1",
+      "at_ms": 15000
+    }
+  ]
+}

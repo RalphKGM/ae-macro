@@ -167,7 +167,7 @@
       <td><input data-task-field="name" value="${escapeHtml(task.name)}"></td>
       <td><select data-task-field="mode">${optionList(state.catalog.modes.map(mode => mode.id), task.mode)}</select></td>
       <td><input data-task-field="repetitions" type="number" min="1" value="${task.infinite ? 1 : escapeHtml(task.repetitions || 1)}" title="set infinite from row menu"></td>
-      <td><input data-task-field="map" value="${escapeHtml(task.map)}"></td>
+      <td><input data-task-field="map" list="mapCatalog" value="${escapeHtml(task.map)}"></td>
       <td><select data-task-field="stage">${optionList(state.catalog.stages, task.stage)}</select></td>
       <td><select data-task-field="difficulty">${optionList(state.catalog.difficulties, task.difficulty)}</select></td>
       <td><select data-task-field="team">${optionList(state.catalog.teams, task.team)}</select></td>
@@ -192,6 +192,8 @@
   function renderTaskDetails() {
     const task = state.tasks[state.selectedTask];
     $("#taskChallengeKind").value = task?.challenge_kind || "";
+    $("#taskRetryLimit").value = task?.retry?.maximum_consecutive_failures ?? 0;
+    $("#taskRetryExhausted").value = task?.retry?.on_exhausted || "stop";
     $("#taskRouteJson").value = task?.navigation_actions?.length
       ? JSON.stringify(task.navigation_actions, null, 2)
       : "";
@@ -199,6 +201,8 @@
       ? JSON.stringify(task.team_actions, null, 2)
       : "";
     $("#taskChallengeKind").disabled = !task;
+    $("#taskRetryLimit").disabled = !task;
+    $("#taskRetryExhausted").disabled = !task;
     $("#taskRouteJson").disabled = !task;
     $("#taskTeamRouteJson").disabled = !task;
   }
@@ -209,6 +213,10 @@
     const challengeKind = $("#taskChallengeKind").value;
     if (challengeKind) task.challenge_kind = challengeKind;
     else delete task.challenge_kind;
+    task.retry = {
+      maximum_consecutive_failures: Math.max(0, Math.floor(number($("#taskRetryLimit").value, 0))),
+      on_exhausted: $("#taskRetryExhausted").value === "skip" ? "skip" : "stop",
+    };
     const routeText = $("#taskRouteJson").value.trim();
     if (!routeText) {
       delete task.navigation_actions;
@@ -424,7 +432,8 @@
     profile.runtime.allow_return_to_lobby = $("#settingReturnLobby").checked;
     profile.runtime.queue_start_over = $("#taskStartOver").checked;
     profile.camera.zoom_in_presses = number($("#settingZoomIn").value, 18);
-    profile.camera.pitch_drags = number($("#settingPitchDrags").value, 2);
+    profile.camera.pitch_steps = number($("#settingPitchSteps").value, 30);
+    profile.camera.pitch_delta_y = number($("#settingPitchDelta").value, 100);
     profile.camera.zoom_out_delta = number($("#settingZoomOut").value, -20);
     profile.camera.settle_ms = number($("#settingSettle").value, 1800);
     profile.crafting.enabled = $("#settingCraftEnabled").checked;
@@ -450,6 +459,9 @@
     profile.challenges.fallback_counters = $("#settingChallengeFallback").checked;
     profile.webhooks.enabled = $("#settingWebhookEnabled").checked;
     profile.webhooks.include_screenshot = $("#settingWebhookScreenshot").checked;
+    profile.webhooks.events = $$("[data-webhook-event]")
+      .filter(input => input.checked)
+      .map(input => input.dataset.webhookEvent);
     profile.tasks = state.tasks;
     profile.teams = [...$("#teamSettings").querySelectorAll(".team-row")].map(row => ({
       id: row.querySelector('[data-team-field="id"]').value,
@@ -482,7 +494,8 @@
     $("#settingReturnLobby").checked = !!profile.runtime.allow_return_to_lobby;
     $("#taskStartOver").checked = !!profile.runtime.queue_start_over;
     $("#settingZoomIn").value = profile.camera.zoom_in_presses || 18;
-    $("#settingPitchDrags").value = profile.camera.pitch_drags || 2;
+    $("#settingPitchSteps").value = profile.camera.pitch_steps || 30;
+    $("#settingPitchDelta").value = profile.camera.pitch_delta_y || 100;
     $("#settingZoomOut").value = profile.camera.zoom_out_delta || -20;
     $("#settingSettle").value = profile.camera.settle_ms || 1800;
     $("#settingCraftEnabled").checked = !!profile.crafting.enabled;
@@ -498,6 +511,10 @@
     $("#settingChallengeFallback").checked = profile.challenges.fallback_counters !== false;
     $("#settingWebhookEnabled").checked = !!profile.webhooks.enabled;
     $("#settingWebhookScreenshot").checked = profile.webhooks.include_screenshot !== false;
+    const webhookEvents = new Set(profile.webhooks.events || []);
+    $$("[data-webhook-event]").forEach(input => {
+      input.checked = webhookEvents.has(input.dataset.webhookEvent);
+    });
     $("#runStartSelect").value = profile.runtime.start_action || "auto";
     $("#teamSettings").innerHTML = (profile.teams || []).map((team, index) =>
       `<div class="team-row" data-team-index="${index}">
@@ -510,6 +527,8 @@
   }
 
   function renderCatalog() {
+    const maps = [...new Set(state.catalog.modes.flatMap(mode => mode.maps || []))];
+    $("#mapCatalog").innerHTML = optionList(maps);
     $("#positionMode").innerHTML = optionList(state.catalog.modes.map(mode => mode.id), "Story");
     $("#positionStage").innerHTML = optionList(state.catalog.stages, "Act 1");
     $("#positionDifficulty").innerHTML = optionList(state.catalog.difficulties, "Mastery");
@@ -619,6 +638,14 @@
       renderRunTasks();
     });
     $("#taskChallengeKind").addEventListener("change", () => {
+      syncTaskDetails(false);
+      markDirty();
+    });
+    $("#taskRetryLimit").addEventListener("input", () => {
+      syncTaskDetails(false);
+      markDirty();
+    });
+    $("#taskRetryExhausted").addEventListener("change", () => {
       syncTaskDetails(false);
       markDirty();
     });
@@ -839,8 +866,10 @@
         if (payload.challenges) renderChallengeStatuses(payload.challenges);
         runtimePill();
         $("#progressBar").style.width = "100%";
-        log(`${payload.result}: ${payload.task}`, payload.result === "victory" ? "success" : "error");
-        toast(`${payload.result} · ${payload.task}`);
+        const rewardSummary = payload.rewards?.summary || "no readable rewards";
+        const attempt = payload.attempt ? ` · try ${payload.attempt}` : "";
+        log(`${payload.result}: ${payload.task}${attempt} · ${rewardSummary}`, payload.result === "victory" ? "success" : "error");
+        toast(`${payload.result} · ${rewardSummary}`);
       } else if (event === "complete" || event === "stopped") {
         state.runtime = { ...state.runtime, active: false, paused: false, state: "IDLE", stats: payload.stats || state.runtime.stats };
         runtimePill();
