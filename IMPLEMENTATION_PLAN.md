@@ -14,6 +14,10 @@ Required capabilities:
 - Discord notifications, optionally including a Roblox-window screenshot.
 - Importable/exportable profiles so configuration is not embedded in code.
 
+## Current status
+
+The default King's Tomb Act 1 Mastery path is implemented and passed a full live run on July 23, 2026. The dashboard, unlimited queue, strategy/position editor, result handling, guarded Rainbow Sprite workflow, challenge-panel OCR, and Discord Keychain integration are implemented. King's Tomb has a built-in route; other maps and modes use task-level navigation actions until their live routes are calibrated.
+
 ## Findings from v0.4
 
 The v0.4 release was published on July 22, 2026 and contains a 64-bit compiled AutoHotkey v2 executable plus image assets. Static inspection recovered a 6,158-line embedded script.
@@ -327,6 +331,8 @@ Exit criterion: the engine can identify lobby, in-stage, victory, defeat, and di
 
 Exit criterion: King's Tomb (Act 1) Mastery completes repeatedly with bounded recovery and produces a reliable completed-run signal for auto-craft cadence.
 
+**Live result (July 23, 2026): passed.** One run finished in 4m17s with six placements, upgrades, DPS auto-upgrade, a detected victory, 5 Grey Sprite rewards, and a verified result-to-lobby transition.
+
 ### Milestone 3 — Custom UI and unlimited queue
 
 - Build the WebView profile editor and unlimited task list.
@@ -334,6 +340,8 @@ Exit criterion: King's Tomb (Act 1) Mastery completes repeatedly with bounded re
 - Add Raid, Challenge, and Expedition navigation adapters.
 
 Exit criterion: a mixed-mode queue survives Hammerspoon reload and resumes at the correct task/repetition.
+
+**Implementation result (July 23, 2026): passed for the data-driven queue.** The WebView supports an unbounded ordered task array, duplication, enable/disable, finite/infinite repetitions, queue looping, all four mode types, task-level challenge kinds, and custom click/drag/key/wait lobby routes. Only King's Tomb currently ships with a live-calibrated built-in route.
 
 ### Milestone 4 — Teams and strategy editor
 
@@ -353,11 +361,15 @@ Exit criterion: selected strategies execute deterministically across the priorit
 
 Exit criterion: crafting can succeed or safely abort and then resume the exact interrupted task.
 
+**Implementation result (July 23, 2026): guarded and calibrated.** The complete Rainbow Sprite coordinate path was checked live without pressing Craft. It is opt-in, requires an explicit material-use confirmation, blocks Quick Craft, persists cadence, and resumes the queue from the lobby. A material-spending craft was intentionally not executed during the safety-limited live test.
+
 ### Milestone 6 — Challenge scheduling and cap detection
 
 - Calibrate challenge-panel states and counter recognition.
 - Add safe-checkpoint scheduling, map detection, per-map teams, reset handling, and fallback counters.
 - Add capped/locked/error diagnostics and webhook events.
+
+**Live result (July 23, 2026): passed for the visible regular cap.** The macro opened the challenge panel and read the current `10/10` limit with native macOS Vision OCR, then closed the panel and returned to the lobby. Regular, hourly, daily, and weekly counters keep separate periods and fallback state.
 
 Exit criterion: capped challenges are skipped without wasting a run, and available challenges resume the interrupted task afterward.
 

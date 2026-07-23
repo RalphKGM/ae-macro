@@ -1,4 +1,5 @@
-local Coordinates = require("app.core.coordinates")
+local Catalog = require("app.config.catalog")
+local Profiles = require("app.config.profiles")
 local Strategy = require("app.core.strategy")
 
 local Controller = {}
@@ -20,27 +21,37 @@ function Controller.new(options)
   return setmetatable({
     root = options.root,
     profile = options.profile,
+    profileStore = options.profileStore,
     store = options.store,
     roblox = options.roblox,
     capture = options.capture,
     vision = options.vision,
     input = options.input,
+    mapStore = options.mapStore,
+    webhooks = options.webhooks,
     logger = options.logger,
+    statusProvider = options.statusProvider,
+    onProfileChanged = options.onProfileChanged,
+    automation = options.automation,
     webview = nil,
     content = nil,
-    recordTap = nil,
     menu = nil,
+    previewTimer = nil,
   }, Controller)
+end
+
+function Controller:setAutomation(automation)
+  self.automation = automation
 end
 
 function Controller:_send(event, payload)
   if not self.webview then return end
-  local message = self.profile and hs.json.encode({ event = event, payload = payload }) or "{}"
+  local message = hs.json.encode({ event = event, payload = payload or {} })
   self.webview:evaluateJavaScript("window.MacroApp && window.MacroApp.receive(" .. message .. ")")
 end
 
 function Controller:_error(message)
-  self.logger:error("strategy_gui_error", { error = tostring(message) })
+  self.logger:error("gui_error", { error = tostring(message) })
   self:_send("error", { message = tostring(message) })
 end
 
@@ -48,44 +59,70 @@ function Controller:_toast(message)
   self:_send("toast", { message = tostring(message) })
 end
 
-function Controller:_bootstrap()
-  local strategy = Strategy.new({
-    id = "kings-tomb-act-1-mastery",
-    name = "King's Tomb Act 1 Mastery",
-    map = "King's Tomb",
-    stage = "Act 1",
-    difficulty = "Mastery",
-    team = "current",
+function Controller:_taskAt(index)
+  index = math.max(1, math.floor(index or 1))
+  return self.profile.tasks[index] or self.profile.tasks[1]
+end
+
+function Controller:_strategyForTask(task)
+  local id = task and task.strategy or "kings-tomb-act-1-mastery"
+  local strategy = self.store:load(id)
+  if strategy then return strategy end
+  return Strategy.new({
+    id = id,
+    name = task and task.name or "new strategy",
+    map = task and task.map or "King's Tomb",
+    stage = task and task.stage or "Act 1",
+    difficulty = task and task.difficulty or "Mastery",
+    team = task and task.team or "current",
     reference_resolution = self.profile.reference_resolution,
   })
-  local saved = self.store:load(strategy.id)
-  if saved then strategy = saved end
+end
+
+function Controller:_mapPayload(task)
+  if not task then return nil end
+  local image, path = self.mapStore:image(task)
+  if not image then return { path = self.mapStore:path(task) } end
+  return { image_url = image:encodeAsURLString(), path = path, key = self.mapStore:key(task) }
+end
+
+function Controller:_bootstrap()
+  local runtime = self.automation and self.automation:status() or {
+    active = false, paused = false, state = "IDLE", task_index = 1, stats = {},
+  }
+  local task = self:_taskAt(runtime.task_index)
+  local strategy = self:_strategyForTask(task)
+  local status = self.statusProvider and self.statusProvider() or {}
   self:_send("bootstrap", {
+    profile = self.profile,
     strategy = strategy,
     strategies = self.store:list(),
-    reference_resolution = self.profile.reference_resolution,
-    input_armed = self.input:isArmed(),
+    catalog = Catalog.snapshot(),
+    runtime = runtime,
+    status = status,
+    map = self:_mapPayload(task),
   })
+  self.webhooks:configured(function(configured)
+    self:_send("webhook_status", { configured = configured })
+  end)
 end
 
 function Controller:_makeWindow()
   local screen = hs.screen.mainScreen():frame()
-  local width = math.min(1380, screen.w - 60)
-  local height = math.min(900, screen.h - 60)
   local frame = {
-    x = screen.x + (screen.w - width) / 2,
-    y = screen.y + (screen.h - height) / 2,
-    w = width,
-    h = height,
+    x = screen.x + 20,
+    y = screen.y + 20,
+    w = math.max(980, screen.w - 40),
+    h = math.max(700, screen.h - 40),
   }
   self.content = hs.webview.usercontent.new("animeMacroBridge")
   self.content:setCallback(function(message)
     local body = message and message.body or message
-    if type(body) ~= "table" then self:_error("invalid GUI message") return end
+    if type(body) ~= "table" then self:_error("invalid gui message") return end
     self:_handle(body)
   end)
-  local html, err = read(self.root .. "/app/ui/index.html")
-  if not html then return nil, err end
+  local html, htmlError = read(self.root .. "/app/ui/index.html")
+  if not html then return nil, htmlError end
   local css, cssError = read(self.root .. "/app/ui/styles.css")
   if not css then return nil, cssError end
   local javascript, scriptError = read(self.root .. "/app/ui/app.js")
@@ -96,6 +133,7 @@ function Controller:_makeWindow()
   html = html:gsub('<script src="app.js"></script>', function()
     return "<script>" .. javascript .. "</script>"
   end)
+
   self.webview = hs.webview.new(frame, {
     javaScriptEnabled = true,
     javaScriptCanOpenWindowsAutomatically = false,
@@ -106,7 +144,7 @@ function Controller:_makeWindow()
     :allowGestures(false)
     :allowNewWindows(false)
     :windowStyle({ "titled", "closable", "resizable", "miniaturizable" })
-    :windowTitle("Anime Expeditions — Strategy Studio")
+    :windowTitle("anime expeditions mac")
     :closeOnEscape(true)
     :deleteOnClose(false)
     :darkMode(true)
@@ -117,7 +155,7 @@ end
 function Controller:show()
   if not self.webview then
     local ok, err = self:_makeWindow()
-    if not ok then hs.showError("Strategy Studio: " .. tostring(err)) return nil, err end
+    if not ok then hs.showError("ae gui: " .. tostring(err)) return nil, err end
   end
   self.webview:show():bringToFront(true)
   return true
@@ -131,82 +169,31 @@ function Controller:toggle()
   if self.webview and self.webview:isVisible() then self:hide() else self:show() end
 end
 
-function Controller:_capture()
-  local metadata, err = self.capture:window()
-  if not metadata then self:_error(err) return end
-  local profileInsets = self.profile.roblox.content_insets or {}
-  local captureInsets = {
-    left = math.floor((profileInsets.left or 0) * metadata.pixel_scale.x + 0.5),
-    right = math.floor((profileInsets.right or 0) * metadata.pixel_scale.x + 0.5),
-    top = math.floor((profileInsets.top or 0) * metadata.pixel_scale.y + 0.5),
-    bottom = math.floor((profileInsets.bottom or 0) * metadata.pixel_scale.y + 0.5),
-  }
-  local output = self.root .. "/runtime/captures/editor-" .. timestamp() .. ".png"
-  local id, requestError = self.vision:request("normalize", {
-    input_path = metadata.path,
-    output_path = output,
-    width = self.profile.reference_resolution.w,
-    height = self.profile.reference_resolution.h,
-    insets = captureInsets,
-  }, function(result, visionError)
-    if not result then self:_error(visionError) return end
+function Controller:_capturePreview()
+  local output = self.root .. "/runtime/captures/dashboard-" .. timestamp() .. ".png"
+  local id, err = self.capture:normalized(self.vision, self.profile, output, function(result, captureError)
+    if not result then self:_error(captureError) return end
     local image = hs.image.imageFromPath(result.output_path)
-    if not image then self:_error("could not load normalized editor capture") return end
-    self:_send("capture", {
+    if not image then self:_error("could not load dashboard capture") return end
+    self:_send("preview", {
       image_url = image:encodeAsURLString(),
-      width = result.width,
-      height = result.height,
-      blank_or_solid = result.blank_or_solid,
       path = result.output_path,
+      label = "roblox · " .. os.date("%H:%M:%S"),
     })
-    self.logger:info("strategy_gui_capture", result)
   end)
-  if not id then self:_error(requestError) end
+  if not id then self:_error(err) end
 end
 
-function Controller:_startRecord(payload)
-  self:_stopRecord("restart")
-  local window, err = self.roblox:focus()
-  if not window then self:_error(err) return end
-  self:hide()
-  local types = hs.eventtap.event.types
-  self.recordTap = hs.eventtap.new({ types.leftMouseDown, types.keyDown }, function(event)
-    if event:getType() == types.keyDown and event:getKeyCode() == 53 then
-      self:_stopRecord("cancelled")
-      self:show()
-      self:_toast("Recording cancelled")
-      return true
-    end
-    if event:getType() ~= types.leftMouseDown then return false end
-    local current, findError = self.roblox:find()
-    if not current then
-      self:_stopRecord("Roblox lost")
-      self:show()
-      self:_error(findError)
-      return false
-    end
-    local screenPoint = event:location()
-    local frame = self.roblox:contentFrame(current)
-    if not Coordinates.contains(frame, screenPoint, 1) then return false end
-    local point = Coordinates.screenToReference(screenPoint, frame, self.profile.reference_resolution)
-    point.x = math.floor(point.x * 10 + 0.5) / 10
-    point.y = math.floor(point.y * 10 + 0.5) / 10
-    self:_stopRecord("point captured")
-    self:show()
-    self:_send("recorded_point", { x = point.x, y = point.y, unit_slot = payload.unit_slot })
-    self.logger:info("strategy_point_recorded", { x = point.x, y = point.y, unit_slot = payload.unit_slot })
-    return true
-  end):start()
-  hs.alert.show("Recording Unit " .. tostring(payload.unit_slot) .. " — click Roblox; Esc cancels", 2)
-  self.logger:info("strategy_record_started", { unit_slot = payload.unit_slot })
+function Controller:_captureMap(task)
+  local id, err = self.mapStore:capture(task, function(result, captureError)
+    if not result then self:_error(captureError) return end
+    self:_send("map", self:_mapPayload(task))
+    self:_toast("map image saved")
+  end)
+  if not id then self:_error(err) end
 end
 
-function Controller:_stopRecord(reason)
-  if self.recordTap then self.recordTap:stop() self.recordTap = nil end
-  if reason then self.logger:info("strategy_record_stopped", { reason = reason }) end
-end
-
-function Controller:_preview(strategy)
+function Controller:_previewStrategy(strategy)
   local valid, errors = Strategy.validate(strategy)
   if not valid then self:_error(table.concat(errors, "; ")) return end
   local window, err = self.roblox:focus()
@@ -216,7 +203,7 @@ function Controller:_preview(strategy)
   for _, action in ipairs(strategy.actions) do
     if action.type == "place" then
       count = count + 1
-      self.input:showMarker({ x = action.x, y = action.y }, "U" .. action.unit_slot .. " · " .. count, 4)
+      self.input:showMarker({ x = action.x, y = action.y }, "slot " .. tostring(action.unit_slot), 4)
     end
   end
   if self.previewTimer then self.previewTimer:stop() end
@@ -224,8 +211,43 @@ function Controller:_preview(strategy)
     self.previewTimer = nil
     self:show()
   end)
-  self.logger:info("strategy_preview", { placements = count, strategy = strategy.id })
-  if count == 0 then self:show() self:_toast("Add at least one placement first") end
+  if count == 0 then self:show() self:_toast("add a placement first") end
+end
+
+function Controller:_saveProfile(profile)
+  profile = Profiles.defaults(profile)
+  local saved, err = self.profileStore:save(profile)
+  if not saved then self:_error(err) return end
+  self.profile = saved
+  self.mapStore.profile = saved
+  if self.onProfileChanged then self.onProfileChanged(saved) end
+  self:_send("profile_saved", { profile = saved })
+end
+
+function Controller:_start(payload)
+  if not self.automation then self:_error("run engine is not ready") return end
+  self:hide()
+  local ok, err = self.automation:start(payload)
+  if not ok then
+    self:show()
+    self:_error(err)
+  end
+end
+
+function Controller:runtimeEvent(event, payload)
+  self:_send(event, payload)
+  self:_send("runtime", {
+    active = self.automation and self.automation.active or false,
+    paused = self.automation and self.automation.paused or false,
+    state = payload.state,
+    task = self.automation and self.automation.queue:current() and self.automation.queue:current().name,
+    stats = payload.stats,
+    challenges = payload.challenges,
+    crafting = payload.crafting,
+  })
+  if event == "complete" or event == "stopped" or event == "error" then
+    hs.timer.doAfter(0.2, function() self:show() end)
+  end
 end
 
 function Controller:_handle(message)
@@ -233,62 +255,94 @@ function Controller:_handle(message)
   local payload = message.payload or {}
   if operation == "ready" then
     self:_bootstrap()
-  elseif operation == "capture" then
-    self:_capture()
-  elseif operation == "new" then
+  elseif operation == "hide" then
+    self:hide()
+  elseif operation == "align" then
+    local _, err = self.roblox:align(self.profile.reference_resolution)
+    if err then self:_error(err) else self:_toast("roblox aligned") end
+  elseif operation == "capture_preview" then
+    self:_capturePreview()
+  elseif operation == "capture_map" then
+    self:_captureMap(payload.task)
+  elseif operation == "load_map" then
+    self:_send("map", self:_mapPayload(payload.task))
+  elseif operation == "new_strategy" then
     self:_send("strategy", Strategy.new({ reference_resolution = self.profile.reference_resolution }))
-  elseif operation == "load" then
+  elseif operation == "load_strategy" then
     local strategy, err = self.store:load(payload.id)
     if not strategy then self:_error(err) else self:_send("strategy", strategy) end
-  elseif operation == "save" then
-    local strategy, pathOrError = self.store:save(payload.strategy)
+  elseif operation == "save_strategy" then
+    local strategy, err = self.store:save(payload.strategy)
     if not strategy then
-      self:_error(pathOrError)
+      self:_error(err)
     else
-      self:_send("saved", { strategy = strategy, strategies = self.store:list(), path = pathOrError })
-      self:_toast("Strategy saved")
-      self.logger:info("strategy_saved", { id = strategy.id, path = pathOrError, actions = #strategy.actions })
+      self:_send("strategy_saved", { strategy = strategy, strategies = self.store:list() })
     end
-  elseif operation == "delete" then
-    local ok, err = self.store:delete(payload.id)
-    if not ok then self:_error(err) else self:_send("deleted", { id = payload.id, strategies = self.store:list() }) end
-  elseif operation == "copy_json" then
+  elseif operation == "copy_strategy" then
     local valid, errors = Strategy.validate(payload.strategy)
     if not valid then self:_error(table.concat(errors, "; ")) return end
     hs.pasteboard.setContents(hs.json.encode(payload.strategy, true))
-    self:_toast("Strategy JSON copied")
-  elseif operation == "import" then
-    local paths = hs.dialog.chooseFileOrFolder("Import a strategy JSON", self.store.directory, true, false, false, { "json" }, true)
+    self:_toast("strategy json copied")
+  elseif operation == "import_strategy" then
+    local paths = hs.dialog.chooseFileOrFolder("import strategy json", self.store.directory, true, false, false, { "json" }, true)
     if paths and paths[1] then
       local strategy, err = self.store:import(paths[1])
-      if not strategy then self:_error(err) else self:_send("saved", { strategy = strategy, strategies = self.store:list() }) end
+      if not strategy then self:_error(err) else self:_send("strategy_saved", { strategy = strategy, strategies = self.store:list() }) end
     end
-  elseif operation == "record" then
-    self:_startRecord(payload)
-  elseif operation == "preview" then
-    self:_preview(payload.strategy)
-  elseif operation == "hide" then
-    self:hide()
+  elseif operation == "preview_strategy" then
+    self:_previewStrategy(payload.strategy)
+  elseif operation == "save_profile" then
+    self:_saveProfile(payload.profile)
+  elseif operation == "start" then
+    self:_start(payload)
+  elseif operation == "pause" then
+    if not self.automation:pause() then self:_error("the macro is not running") end
+  elseif operation == "resume" then
+    if not self.automation:resume() then self:_error("the macro is not paused") end
+  elseif operation == "stop" then
+    self.automation:stop(payload.reason or "gui stop")
+  elseif operation == "set_webhook" then
+    self.webhooks:setURL(payload.url, function(ok, err)
+      if not ok then self:_error(err) return end
+      self:_send("webhook_status", { configured = true })
+      self:_toast("webhook saved in macos keychain")
+    end)
+  elseif operation == "test_webhook" then
+    local enabled = self.webhooks.config.enabled
+    self.webhooks.config.enabled = true
+    self.webhooks:send("started", { message = "test from ae mac" }, nil, function(ok, err)
+      self.webhooks.config.enabled = enabled
+      if not ok then self:_error(err) else self:_toast("test webhook sent") end
+    end)
   else
-    self:_error("unsupported GUI operation: " .. tostring(operation))
+    self:_error("unsupported gui operation: " .. tostring(operation))
   end
 end
 
 function Controller:startMenu()
   self.menu = hs.menubar.new()
-  if self.menu then
-    self.menu:setTitle("AE")
-    self.menu:setTooltip("Anime Expeditions Strategy Studio")
-    self.menu:setMenu({
-      { title = "Open Strategy Studio", fn = function() self:show() end },
-      { title = "Capture Roblox", fn = function() self:_capture() end },
-      { title = "Emergency Stop", fn = function() self.input:disarm("menu emergency stop") end },
-    })
-  end
+  if not self.menu then return end
+  self.menu:setTitle("ae")
+  self.menu:setTooltip("anime expeditions mac")
+  self.menu:setMenu(function()
+    local running = self.automation and self.automation.active
+    return {
+      { title = "open ae", fn = function() self:show() end },
+      { title = "-" },
+      { title = "start", disabled = running, fn = function() self:_start({}) end },
+      { title = self.automation and self.automation.paused and "resume" or "pause", disabled = not running, fn = function()
+        if self.automation.paused then self.automation:resume() else self.automation:pause() end
+      end },
+      { title = "stop", disabled = not running, fn = function() self.automation:stop("menu stop") end },
+      { title = "-" },
+      { title = "align roblox", fn = function() self.roblox:align(self.profile.reference_resolution) end },
+      { title = "refresh preview", fn = function() self:_capturePreview() end },
+      { title = "emergency stop", fn = function() self.automation:stop("menu emergency stop") end },
+    }
+  end)
 end
 
 function Controller:stop()
-  self:_stopRecord("shutdown")
   if self.previewTimer then self.previewTimer:stop() self.previewTimer = nil end
   if self.webview then self.webview:delete(true) self.webview = nil end
   self.content = nil

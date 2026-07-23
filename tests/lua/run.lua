@@ -6,6 +6,11 @@ local TaskQueue = require("app.core.task_queue")
 local StateMachine = require("app.core.state_machine")
 local Schema = require("app.config.schema")
 local Strategy = require("app.core.strategy")
+local Stats = require("app.core.stats")
+local Crafting = require("app.features.crafting")
+local Challenges = require("app.features.challenges")
+local Webhooks = require("app.features.webhooks")
+local Navigation = require("app.features.navigation")
 
 local passed = 0
 local function test(name, fn)
@@ -64,6 +69,18 @@ test("queue checkpoint resume", function()
   assert(queue:current() == nil)
 end)
 
+test("completed queue can restart without a task limit", function()
+  local queue = TaskQueue.new({
+    { name = "A", repetitions = 1 },
+    { name = "B", repetitions = 1 },
+  })
+  queue:recordSuccess()
+  queue:recordSuccess()
+  assert(queue:current() == nil)
+  assert(queue:restart().name == "A")
+  assert(queue.index == 1 and queue.repetition == 0)
+end)
+
 test("state transition validation", function()
   local machine = StateMachine.new()
   machine:transition("ATTACH_ROBLOX", "test")
@@ -77,10 +94,102 @@ end)
 test("profile schema accepts unbounded task list", function()
   local tasks = {}
   for index = 1, 100 do
-    tasks[index] = { name = "T" .. index, mode = "Story", repetitions = 1 }
+    tasks[index] = {
+      name = "T" .. index,
+      mode = "Story",
+      map = "King's Tomb",
+      stage = "Act 1",
+      difficulty = "Mastery",
+      repetitions = 1,
+    }
   end
   local ok, errors = Schema.validate({ schema_version = 1, reference_resolution = { w = 816, h = 638 }, tasks = tasks })
   assert(ok == true and #errors == 0)
+end)
+
+test("profile schema accepts custom routes and crafting workflows", function()
+  local profile = {
+    schema_version = 1,
+    reference_resolution = { w = 816, h = 638 },
+    tasks = {
+      {
+        name = "custom raid",
+        mode = "Raid",
+        map = "custom",
+        stage = "Act 1",
+        difficulty = "Normal",
+        repetitions = 2,
+        navigation_actions = {
+          { type = "click", point = { x = 80, y = 390 }, wait_ms = 200 },
+          { type = "drag", from = { x = 100, y = 500 }, to = { x = 700, y = 500 } },
+          { type = "key", key = "e" },
+          { type = "wait", wait_ms = 100 },
+        },
+        team_actions = {
+          { type = "key", key = "h", wait_ms = 200 },
+          { type = "click", point = { x = 603, y = 273 } },
+        },
+      },
+    },
+    crafting = {
+      workflow = {
+        { type = "click", point = { x = 640, y = 420 } },
+      },
+    },
+  }
+  local ok, errors = Schema.validate(profile)
+  assert(ok == true and #errors == 0)
+end)
+
+test("built-in navigation keeps task-level team actions", function()
+  local navigation = Navigation.new({})
+  local route = navigation:_route({
+    mode = "Story",
+    map = "King's Tomb",
+    stage = "Act 1",
+    difficulty = "Mastery",
+    team_actions = {
+      { type = "key", key = "h" },
+    },
+  })
+  assert(route ~= nil and #route.lobby > 0)
+  assert(#route.team == 1 and route.team[1].key == "h")
+end)
+
+test("profile schema rejects automation points outside the canvas", function()
+  local profile = {
+    schema_version = 1,
+    reference_resolution = { w = 816, h = 638 },
+    tasks = {
+      {
+        name = "unsafe",
+        mode = "Story",
+        map = "map",
+        stage = "Act 1",
+        difficulty = "Normal",
+        repetitions = 1,
+        navigation_actions = {
+          { type = "click", point = { x = 817, y = 200 } },
+        },
+      },
+    },
+  }
+  local ok, errors = Schema.validate(profile)
+  assert(ok == nil and #errors == 1)
+end)
+
+test("run stats track victories and defeats", function()
+  local stats = Stats.new()
+  stats:startRun(100)
+  assert(stats:record("victory", 130) == 30)
+  stats:startRun(200)
+  assert(stats:record("defeat", 212) == 12)
+  local snapshot = stats:snapshot()
+  assert(snapshot.runs == 2)
+  assert(snapshot.victories == 1)
+  assert(snapshot.defeats == 1)
+  assert(snapshot.win_rate == 50)
+  assert(snapshot.total_runtime == 42)
 end)
 
 test("strategy validates placement automation", function()
@@ -88,6 +197,7 @@ test("strategy validates placement automation", function()
   strategy.actions = {
     { id = "p1", type = "place", unit_slot = 1, x = 408, y = 319, delay_ms = 500, upgrade_target = "max", ability_mode = "auto", target_mode = "first" },
     { id = "u1", type = "upgrade", placement_id = "p1", levels = "max", delay_ms = 0 },
+    { id = "au1", type = "auto_upgrade", placement_id = "p1", at_ms = 5000 },
     { id = "a1", type = "ability", placement_id = "p1", mode = "auto", delay_ms = 0 },
     { id = "t1", type = "target", placement_id = "p1", mode = "strongest", delay_ms = 0 },
     { id = "w1", type = "wait", duration_ms = 1000, delay_ms = 0 },
@@ -96,7 +206,7 @@ test("strategy validates placement automation", function()
   local ok, errors = Strategy.validate(strategy)
   assert(ok == true and #errors == 0)
   local summary = Strategy.summary(strategy)
-  assert(summary.actions == 6 and summary.placements == 1)
+  assert(summary.actions == 7 and summary.placements == 1)
 end)
 
 test("strategy rejects unsafe coordinates and dangling actions", function()
@@ -107,6 +217,124 @@ test("strategy rejects unsafe coordinates and dangling actions", function()
   }
   local ok, errors = Strategy.validate(strategy)
   assert(ok == nil and #errors >= 4)
+end)
+
+test("auto craft is gated and quick craft is blocked", function()
+  local crafting = Crafting.new({
+    config = {
+      enabled = true,
+      live_confirmation = false,
+      trigger = { type = "mastery_victories", every = 2 },
+      recipes = {
+        { enabled = true, name = "Sprite (Rainbow)", allow_quick_craft = false },
+      },
+    },
+    logger = { info = function() end, error = function() end },
+  })
+  crafting:recordVictory({ difficulty = "Mastery" })
+  assert(crafting:due() == false)
+  crafting:recordVictory({ difficulty = "Mastery" })
+  assert(crafting:due() == true)
+  local plan, err = crafting:plan()
+  assert(plan == nil and err:match("live%-confirmation"))
+  crafting.config.live_confirmation = true
+  crafting.config.recipes[1].allow_quick_craft = true
+  plan, err = crafting:plan()
+  assert(plan == nil and err:match("premium currency"))
+  crafting.config.recipes[1].allow_quick_craft = false
+  plan, err = crafting:plan()
+  assert(type(plan) == "table" and err == nil)
+end)
+
+test("guarded auto craft runs the configured workflow in order", function()
+  local scheduled = {}
+  _G.hs = {
+    timer = {
+      doAfter = function(_, callback)
+        table.insert(scheduled, callback)
+        return { stop = function() end }
+      end,
+    },
+  }
+  local actions = {
+    { type = "click", point = { x = 1, y = 2 }, label = "open", wait_ms = 1 },
+    { type = "key", key = "e", label = "station", wait_ms = 1 },
+    { type = "wait", label = "settle", wait_ms = 1 },
+    { type = "click", point = { x = 3, y = 4 }, label = "normal craft", wait_ms = 1 },
+  }
+  local seen = {}
+  local crafting = Crafting.new({
+    config = {
+      enabled = true,
+      live_confirmation = true,
+      workflow = actions,
+      recipes = {
+        { enabled = true, name = "Sprite (Rainbow)", allow_quick_craft = false },
+      },
+    },
+    input = {
+      click = function(_, _, reason, callback)
+        table.insert(seen, reason)
+        callback(true)
+        return true
+      end,
+      key = function(_, key)
+        table.insert(seen, "key:" .. key)
+        return true
+      end,
+    },
+    logger = { info = function() end, error = function() end },
+  })
+  local completed, completedRecipe
+  crafting:run(function(_, message) table.insert(seen, "progress:" .. message) end, function(ok, _, recipe)
+    completed, completedRecipe = ok, recipe
+  end)
+  while #scheduled > 0 do
+    local callback = table.remove(scheduled, 1)
+    callback()
+  end
+  assert(completed == true and completedRecipe.name == "Sprite (Rainbow)")
+  assert(crafting:snapshot().completed_crafts == 1)
+  assert(table.concat(seen, "|"):match("progress:normal craft|crafting: normal craft"))
+  _G.hs = nil
+end)
+
+test("challenge caps skip only matching challenge tasks", function()
+  local challenges = Challenges.new({
+    config = {
+      enabled = true,
+      regular_cap = 10,
+      caps = { regular_side = 10, daily = 1, hourly = 1, weekly = 1 },
+    },
+    path = os.tmpname(),
+    json = { decode = function() return {} end, encode = function() return "{}" end },
+  })
+  local challenge = { mode = "Challenge", challenge_kind = "regular_side" }
+  local story = { mode = "Story", map = "King's Tomb" }
+  challenges.counters.regular_side = {
+    current = 10,
+    maximum = 10,
+    period = os.date("%Y-%m-%d"),
+    source = "visible_counter",
+  }
+  local allowed, status = challenges:allowsTask(challenge)
+  assert(allowed == false and status.state == "capped")
+  assert(challenges:allowsTask(story) == true)
+  os.remove(challenges.path)
+end)
+
+test("webhook storage only accepts Discord webhook hosts", function()
+  local webhooks = Webhooks.new({ config = {}, logger = {} })
+  webhooks._keychain = function(_, _, callback) callback("", nil) return true end
+  local accepted, errorMessage
+  webhooks:setURL("https://example.com/api/webhooks/123/token", function(ok, err)
+    accepted, errorMessage = ok, err
+  end)
+  assert(accepted == nil and errorMessage:match("Discord"))
+  webhooks:setURL("https://discord.com/api/webhooks/123/token_abc-DEF", function(ok, err)
+    accepted, errorMessage = ok, err
+  end)
+  assert(accepted == true and errorMessage == nil)
 end)
 
 print(string.format("%d Lua tests passed", passed))

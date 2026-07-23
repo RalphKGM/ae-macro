@@ -9,6 +9,7 @@ import numpy as np
 from .matching import best_template_match, read_image
 
 COUNTER_PATTERN = re.compile(r"^\s*(\d+)\s*/\s*(\d+)\s*$")
+COUNTER_SEARCH_PATTERN = re.compile(r"(?<!\d)(\d+)\s*/\s*(\d+)(?!\d)")
 
 
 def parse_counter_text(text: str) -> dict[str, int | bool]:
@@ -19,6 +20,15 @@ def parse_counter_text(text: str) -> dict[str, int | bool]:
     if maximum <= 0 or current < 0:
         raise ValueError("counter values are invalid")
     return {"current": current, "maximum": maximum, "capped": current >= maximum}
+
+
+def counters_from_text(text: str) -> list[dict[str, int | bool | str]]:
+    counters: list[dict[str, int | bool | str]] = []
+    for match in COUNTER_SEARCH_PATTERN.finditer(text or ""):
+        value = f"{match.group(1)}/{match.group(2)}"
+        parsed = parse_counter_text(value)
+        counters.append({"text": value, **parsed})
+    return counters
 
 
 def preprocess_counter(image: np.ndarray) -> np.ndarray:
@@ -71,11 +81,13 @@ def recognize_counter(image: np.ndarray, templates: dict[str, np.ndarray], minim
 
 
 def classify_availability(*, counter: dict | None = None, labels: list[str] | None = None) -> dict[str, str | bool]:
-    normalized = {label.strip().lower() for label in (labels or [])}
-    if any(label in normalized for label in ("locked", "limit reached", "completed")):
-        state = "locked" if "locked" in normalized else "completed"
+    normalized = [label.strip().lower() for label in (labels or [])]
+    joined = "\n".join(normalized)
+    if any(label in joined for label in ("locked", "limit reached", "completed", "rewards claimed")):
+        state = "locked" if "locked" in joined else "completed"
         return {"available": False, "state": state, "source": "visible_label"}
     if counter and counter.get("readable"):
         return {"available": not bool(counter.get("capped")), "state": "capped" if counter.get("capped") else "available", "source": "visible_counter"}
+    if any(label in joined for label in ("rewards available", "available!")):
+        return {"available": True, "state": "available", "source": "visible_label"}
     return {"available": False, "state": "unknown", "source": "unreadable"}
-

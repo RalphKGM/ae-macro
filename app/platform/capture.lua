@@ -34,4 +34,23 @@ function Capture:window(path)
   return metadata
 end
 
+function Capture:normalized(vision, profile, output, callback)
+  local metadata, err = self:window()
+  if not metadata then return nil, err end
+  local insets = profile.roblox.content_insets or {}
+  local scaledInsets = {
+    left = math.floor((insets.left or 0) * metadata.pixel_scale.x + 0.5),
+    right = math.floor((insets.right or 0) * metadata.pixel_scale.x + 0.5),
+    top = math.floor((insets.top or 0) * metadata.pixel_scale.y + 0.5),
+    bottom = math.floor((insets.bottom or 0) * metadata.pixel_scale.y + 0.5),
+  }
+  return vision:request("normalize", {
+    input_path = metadata.path,
+    output_path = output,
+    width = profile.reference_resolution.w,
+    height = profile.reference_resolution.h,
+    insets = scaledInsets,
+  }, callback)
+end
+
 return Capture

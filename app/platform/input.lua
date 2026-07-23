@@ -2,7 +2,7 @@ local Coordinates = require("app.core.coordinates")
 local Input = {}
 Input.__index = Input
 
-function Input.new(robloxWindow, reference, logger)
+function Input.new(robloxWindow, reference, logger, root)
   local clickBinary
   for _, candidate in ipairs({ "/opt/homebrew/bin/cliclick", "/usr/local/bin/cliclick" }) do
     if hs.fs.attributes(candidate) then clickBinary = candidate break end
@@ -13,8 +13,11 @@ function Input.new(robloxWindow, reference, logger)
     logger = logger,
     click_binary = clickBinary,
     click_tasks = {},
+    native_binary = root and (root .. "/runtime/bin/ae-input") or nil,
     armed_until = 0,
     arm_timer = nil,
+    session_active = false,
+    session_label = nil,
     overlays = {},
   }, Input)
 end
@@ -27,8 +30,10 @@ function Input:disarm(reason)
   self.armed_until = 0
   if self.arm_timer then self.arm_timer:stop() self.arm_timer = nil end
   self.logger:info("input_disarmed", { reason = reason or "manual" })
-  hs.alert.closeAll()
-  hs.alert.show("Anime Expeditions input DISARMED", 1.2)
+  if not self.session_active then
+    hs.alert.closeAll()
+    hs.alert.show("Anime Expeditions input DISARMED", 1.2)
+  end
 end
 
 function Input:arm(seconds)
@@ -38,6 +43,24 @@ function Input:arm(seconds)
   self.arm_timer = hs.timer.doAfter(seconds, function() self:disarm("timeout") end)
   self.logger:warn("input_armed", { seconds = seconds })
   hs.alert.show("INPUT ARMED for " .. seconds .. "s — Ctrl+Alt+Cmd+Esc stops", 2)
+end
+
+function Input:beginSession(label)
+  self.session_active = true
+  self.session_label = label or "automation"
+  self.logger:warn("input_session_started", { label = self.session_label })
+  return true
+end
+
+function Input:endSession(reason)
+  self.session_active = false
+  self.session_label = nil
+  self:disarm(reason or "session ended")
+  self.logger:info("input_session_ended", { reason = reason or "session ended" })
+end
+
+function Input:isAllowed()
+  return self.session_active or self:isArmed()
 end
 
 function Input:referencePoint(point)
@@ -75,34 +98,136 @@ function Input:showMarker(point, label, duration)
   return true
 end
 
-function Input:click(point, reason)
-  if not self:isArmed() then return nil, "input is not armed" end
+function Input:_ready()
+  if not self:isAllowed() then return nil, "input is not armed and no run session is active" end
+  local window, err = self.roblox:find()
+  if not window then return nil, err end
+  if not self.roblox:isFrontmost(window) then
+    if not self.session_active then return nil, "Roblox is not frontmost" end
+    local focused, focusError = self.roblox:focus()
+    if not focused then return nil, focusError end
+    hs.timer.usleep(120000)
+    window = focused
+    if not self.roblox:isFrontmost(window) then return nil, "Roblox could not be focused" end
+    self.logger:info("roblox_refocused_for_input", { label = self.session_label })
+  end
+  return window
+end
+
+function Input:_task(path, arguments, reason, callback)
+  local task
+  task = hs.task.new(path, function(exitCode, stdout, stderr)
+    self.click_tasks[task] = nil
+    if exitCode ~= 0 then
+      self.logger:error("input_helper_failed", {
+        exit_code = exitCode, stdout = stdout, stderr = stderr, reason = reason or "unspecified",
+      })
+    end
+    if callback then
+      local helperError = nil
+      if exitCode ~= 0 then helperError = stderr ~= "" and stderr or "input helper failed" end
+      callback(exitCode == 0, helperError)
+    end
+  end, arguments)
+  if not task or not task:start() then return nil, "could not start native input helper" end
+  self.click_tasks[task] = true
+  return true
+end
+
+function Input:click(point, reason, callback)
+  local ready, readyError = self:_ready()
+  if not ready then return nil, readyError end
   local screenPoint, windowOrErr = self:referencePoint(point)
   if not screenPoint then return nil, windowOrErr end
   local window = windowOrErr
   if not self.roblox:isFrontmost(window) then return nil, "Roblox is not frontmost" end
-  if not self.click_binary then return nil, "cliclick is missing; run scripts/setup.sh" end
-
   local x = math.floor(screenPoint.x + 0.5)
   local y = math.floor(screenPoint.y + 0.5)
-  local task
-  task = hs.task.new(self.click_binary, function(exitCode, stdout, stderr)
-    self.click_tasks[task] = nil
-    if exitCode ~= 0 then
-      self.logger:error("input_click_failed", {
-        exit_code = exitCode, stdout = stdout, stderr = stderr,
-        x = x, y = y, reason = reason or "unspecified",
-      })
-    end
-  end, { "-w", "150", string.format("m:%d,%d", x, y), "c:." })
-  if not task or not task:start() then return nil, "could not start native click helper" end
-  self.click_tasks[task] = true
+  if not self.click_binary then return nil, "cliclick is missing; run scripts/setup.sh" end
+  local ok, err = self:_task(self.click_binary, { "-w", "150", string.format("m:%d,%d", x, y), "c:." }, reason, callback)
+  if not ok then return nil, err end
   self.logger:warn("input_click", { x = x, y = y, reference_x = point.x, reference_y = point.y, reason = reason or "unspecified", backend = "cliclick" })
   return true
 end
 
+function Input:key(key, repeats, intervalMs)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  repeats = math.max(1, math.floor(repeats or 1))
+  intervalMs = math.max(0, intervalMs or 35)
+  for _ = 1, repeats do
+    hs.eventtap.keyStroke({}, key, 0)
+    if intervalMs > 0 then hs.timer.usleep(intervalMs * 1000) end
+  end
+  self.logger:warn("input_key", { key = key, repeats = repeats })
+  return true
+end
+
+function Input:drag(fromPoint, toPoint, durationMs, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  local fromScreen, fromError = self:referencePoint(fromPoint)
+  if not fromScreen then return nil, fromError end
+  local toScreen, toError = self:referencePoint(toPoint)
+  if not toScreen then return nil, toError end
+  if not self.click_binary then return nil, "cliclick is missing; run scripts/setup.sh" end
+  local wait = math.max(20, math.floor((durationMs or 500) / 3))
+  return self:_task(self.click_binary, {
+    "-w", tostring(wait),
+    string.format("m:%d,%d", math.floor(fromScreen.x + 0.5), math.floor(fromScreen.y + 0.5)),
+    "dd:.",
+    string.format("dm:%d,%d", math.floor(toScreen.x + 0.5), math.floor(toScreen.y + 0.5)),
+    "du:.",
+  }, reason, callback)
+end
+
+function Input:rightDrag(fromPoint, toPoint, durationMs, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  if not self.native_binary or not hs.fs.attributes(self.native_binary) then
+    return nil, "native camera helper is missing; run scripts/setup.sh"
+  end
+  local fromScreen, fromError = self:referencePoint(fromPoint)
+  if not fromScreen then return nil, fromError end
+  local toScreen, toError = self:referencePoint(toPoint)
+  if not toScreen then return nil, toError end
+  return self:_task(self.native_binary, {
+    "right-drag",
+    tostring(math.floor(fromScreen.x + 0.5)), tostring(math.floor(fromScreen.y + 0.5)),
+    tostring(math.floor(toScreen.x + 0.5)), tostring(math.floor(toScreen.y + 0.5)),
+    tostring(math.floor(durationMs or 900)),
+  }, reason, callback)
+end
+
+function Input:move(fromPoint, toPoint, durationMs, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  if not self.native_binary or not hs.fs.attributes(self.native_binary) then
+    return nil, "native camera helper is missing; run scripts/setup.sh"
+  end
+  local fromScreen, fromError = self:referencePoint(fromPoint)
+  if not fromScreen then return nil, fromError end
+  local toScreen, toError = self:referencePoint(toPoint)
+  if not toScreen then return nil, toError end
+  return self:_task(self.native_binary, {
+    "move",
+    tostring(math.floor(fromScreen.x + 0.5)), tostring(math.floor(fromScreen.y + 0.5)),
+    tostring(math.floor(toScreen.x + 0.5)), tostring(math.floor(toScreen.y + 0.5)),
+    tostring(math.floor(durationMs or 900)),
+  }, reason, callback)
+end
+
+function Input:scroll(delta, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  if not self.native_binary or not hs.fs.attributes(self.native_binary) then
+    return nil, "native camera helper is missing; run scripts/setup.sh"
+  end
+  return self:_task(self.native_binary, { "scroll", tostring(math.floor(delta or 0)) }, reason, callback)
+end
+
 function Input:stop()
-  self:disarm("shutdown")
+  self:endSession("shutdown")
   for task in pairs(self.click_tasks) do task:terminate() end
   self.click_tasks = {}
   for _, canvas in ipairs(self.overlays) do canvas:delete() end

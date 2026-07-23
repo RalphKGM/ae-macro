@@ -5,7 +5,7 @@ local allowed = {
   IDLE = { ATTACH_ROBLOX = true },
   ATTACH_ROBLOX = { CALIBRATE = true, RECOVERY = true, IDLE = true },
   CALIBRATE = { LOBBY_DETECT = true, RECOVERY = true, IDLE = true },
-  LOBBY_DETECT = { MODE_SELECT = true, AUTO_CRAFT = true, SIDE_CHALLENGE_SELECT = true, RECOVERY = true, IDLE = true },
+  LOBBY_DETECT = { MODE_SELECT = true, AUTO_CRAFT = true, SIDE_CHALLENGE_SELECT = true, COMPLETE = true, RECOVERY = true, IDLE = true },
   MODE_SELECT = { MAP_SELECT = true, RECOVERY = true, IDLE = true },
   MAP_SELECT = { STAGE_SELECT = true, RECOVERY = true, IDLE = true },
   STAGE_SELECT = { TEAM_SELECT = true, RECOVERY = true, IDLE = true },
@@ -49,4 +49,3 @@ function StateMachine:stop(reason)
 end
 
 return StateMachine
-

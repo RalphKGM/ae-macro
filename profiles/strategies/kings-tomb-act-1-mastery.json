@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "id": "kings-tomb-act-1-mastery",
+  "name": "king's tomb act 1 mastery",
+  "map": "King's Tomb",
+  "stage": "Act 1",
+  "difficulty": "Mastery",
+  "team": "current",
+  "reference_resolution": {
+    "w": 816,
+    "h": 638
+  },
+  "actions": [
+    {
+      "id": "dps-1",
+      "type": "place",
+      "unit_slot": 1,
+      "x": 315,
+      "y": 455,
+      "at_ms": 62000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "support-1",
+      "type": "place",
+      "unit_slot": 2,
+      "x": 500,
+      "y": 455,
+      "at_ms": 89000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "support-1-upgrades",
+      "type": "upgrade",
+      "placement_id": "support-1",
+      "levels": 6,
+      "at_ms": 114000
+    },
+    {
+      "id": "cheap-1",
+      "type": "place",
+      "unit_slot": 3,
+      "x": 370,
+      "y": 420,
+      "at_ms": 145000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "cheap-2",
+      "type": "place",
+      "unit_slot": 3,
+      "x": 440,
+      "y": 420,
+      "at_ms": 146500,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "cheap-3",
+      "type": "place",
+      "unit_slot": 3,
+      "x": 550,
+      "y": 420,
+      "at_ms": 148000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "economy-1",
+      "type": "place",
+      "unit_slot": 6,
+      "x": 600,
+      "y": 450,
+      "at_ms": 203000,
+      "target_mode": "first",
+      "ability_mode": "off",
+      "upgrade_target": 0
+    },
+    {
+      "id": "dps-1-auto",
+      "type": "auto_upgrade",
+      "placement_id": "dps-1",
+      "at_ms": 210000
+    }
+  ]
+}

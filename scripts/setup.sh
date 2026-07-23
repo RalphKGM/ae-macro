@@ -3,14 +3,28 @@ set -euo pipefail
 
 SCRIPT_DIR=${0:A:h}
 PROJECT_DIR=${SCRIPT_DIR:h}
-PYTHON_BIN=${PYTHON_BIN:-$(command -v python3)}
 
-if [[ -z "${PYTHON_BIN}" ]]; then
-  print -u2 "python3 is required"
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  for candidate in \
+    /opt/homebrew/Caskroom/miniconda/base/bin/python3 \
+    /opt/homebrew/bin/python3 \
+    /usr/local/bin/python3 \
+    /usr/bin/python3; do
+    if [[ -x "${candidate}" ]] && "${candidate}" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
+      PYTHON_BIN=${candidate}
+      break
+    fi
+  done
+fi
+
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  print -u2 "python 3.12 or newer is required"
   exit 1
 fi
 
-if [[ ! -d "${PROJECT_DIR}/.venv" ]]; then
+if [[ -d "${PROJECT_DIR}/.venv" ]] && ! "${PROJECT_DIR}/.venv/bin/python3" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' 2>/dev/null; then
+  "${PYTHON_BIN}" -m venv --clear "${PROJECT_DIR}/.venv"
+elif [[ ! -d "${PROJECT_DIR}/.venv" ]]; then
   "${PYTHON_BIN}" -m venv "${PROJECT_DIR}/.venv"
 fi
 
@@ -30,6 +44,5 @@ fi
 mkdir -p "${PROJECT_DIR}/runtime/bin"
 swiftc -O "${PROJECT_DIR}/native/ae_input.swift" -o "${PROJECT_DIR}/runtime/bin/ae-input"
 codesign --force --sign - "${PROJECT_DIR}/runtime/bin/ae-input"
-
 "${PROJECT_DIR}/scripts/run_checks.sh"
-print "Setup complete. See LIVE_TEST.md for the assisted capture test."
+print "Setup complete. See README.md for setup and usage."

@@ -38,9 +38,14 @@ function TaskQueue:skip()
   return self:current()
 end
 
+function TaskQueue:restart()
+  self.index = 1
+  self.repetition = 0
+  return self:current()
+end
+
 function TaskQueue:snapshot()
   return { task_index = self.index, repetition = self.repetition }
 end
 
 return TaskQueue
-

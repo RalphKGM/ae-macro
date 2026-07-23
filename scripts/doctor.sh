@@ -4,6 +4,15 @@ set -u
 SCRIPT_DIR=${0:A:h}
 PROJECT_DIR=${SCRIPT_DIR:h}
 FAILED=0
+HS_BIN=${HS_BIN:-}
+
+if [[ -z "${HS_BIN}" ]]; then
+  if command -v hs >/dev/null 2>&1; then
+    HS_BIN=$(command -v hs)
+  elif [[ -x /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ]]; then
+    HS_BIN=/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs
+  fi
+fi
 
 check() {
   local label=$1
@@ -22,11 +31,11 @@ check "Native Roblox click helper" command -v cliclick
 check "Native Roblox camera helper" test -x "${PROJECT_DIR}/runtime/bin/ae-input"
 check "Project virtual environment" test -x "${PROJECT_DIR}/.venv/bin/python3"
 check "OpenCV import" "${PROJECT_DIR}/.venv/bin/python3" -c 'import cv2'
-check "Hammerspoon IPC reachable" hs -c 'return true'
+check "Hammerspoon IPC reachable" "${HS_BIN:-/usr/bin/false}" -c 'return true'
 
-if hs -c 'return _G.AnimeExpeditionsMac ~= nil' 2>/dev/null | grep -q true; then
+if [[ -n "${HS_BIN}" ]] && "${HS_BIN}" -c 'return _G.AnimeExpeditionsMac ~= nil' 2>/dev/null | grep -q true; then
   print "PASS  Project bootstrap loaded"
-  STATUS=$(hs -c 'return hs.json.encode(_G.AnimeExpeditionsMac:status(), true)' 2>/dev/null)
+  STATUS=$("${HS_BIN}" -c 'return hs.json.encode(_G.AnimeExpeditionsMac:status(), true)' 2>/dev/null)
   print "\nRuntime status:"
   print -r -- "${STATUS}"
 else

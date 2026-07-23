@@ -7,6 +7,8 @@ local actionTypes = {
   target = true,
   sell = true,
   wait = true,
+  auto_upgrade = true,
+  conditional = true,
 }
 
 local targetModes = {
@@ -48,7 +50,7 @@ function Strategy.new(options)
 end
 
 function Strategy.slug(value)
-  local slug = tostring(value or ""):lower():gsub("[^%w]+", "-"):gsub("^-+", ""):gsub("-+$", "")
+  local slug = tostring(value or ""):lower():gsub("['’]", ""):gsub("[^%w]+", "-"):gsub("^-+", ""):gsub("-+$", "")
   return slug ~= "" and slug:sub(1, 64) or "strategy"
 end
 
@@ -93,6 +95,9 @@ function Strategy.validate(strategy)
       if action.delay_ms ~= nil and (not finiteNumber(action.delay_ms) or action.delay_ms < 0) then
         add(errors, path .. ".delay_ms", "must be zero or greater")
       end
+      if action.at_ms ~= nil and (not finiteNumber(action.at_ms) or action.at_ms < 0) then
+        add(errors, path .. ".at_ms", "must be zero or greater")
+      end
 
       if action.type == "place" then
         if not finiteNumber(action.unit_slot) or action.unit_slot < 1 or action.unit_slot > 6 or action.unit_slot % 1 ~= 0 then
@@ -115,6 +120,8 @@ function Strategy.validate(strategy)
         if not finiteNumber(action.duration_ms) or action.duration_ms < 0 then
           add(errors, path .. ".duration_ms", "must be zero or greater")
         end
+      elseif action.type == "conditional" then
+        if not nonempty(action.condition) then add(errors, path .. ".condition", "is required") end
       elseif action.type and actionTypes[action.type] then
         if not nonempty(action.placement_id) then
           add(errors, path .. ".placement_id", "is required")
@@ -153,4 +160,3 @@ function Strategy.summary(strategy)
 end
 
 return Strategy
-

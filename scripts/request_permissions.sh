@@ -1,19 +1,26 @@
 #!/bin/zsh
 set -u
 
-if ! command -v hs >/dev/null 2>&1; then
-  print -u2 "Hammerspoon's hs command is not installed"
-  exit 1
+HS_BIN=${HS_BIN:-}
+if [[ -z "${HS_BIN}" ]]; then
+  if command -v hs >/dev/null 2>&1; then
+    HS_BIN=$(command -v hs)
+  elif [[ -x /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ]]; then
+    HS_BIN=/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs
+  else
+    print -u2 "Hammerspoon's hs command is not installed"
+    exit 1
+  fi
 fi
 
-if ! hs -c 'return true' >/dev/null 2>&1; then
+if ! "${HS_BIN}" -c 'return true' >/dev/null 2>&1; then
   open -a Hammerspoon
   print "Hammerspoon was launched. Run this command once more after it finishes opening."
   exit 2
 fi
 
-ACCESSIBILITY=$(hs -c 'return hs.accessibilityState(true)' 2>/dev/null)
-SCREEN_RECORDING=$(hs -c 'return hs.screenRecordingState(true)' 2>/dev/null)
+ACCESSIBILITY=$("${HS_BIN}" -c 'return hs.accessibilityState(true)' 2>/dev/null)
+SCREEN_RECORDING=$("${HS_BIN}" -c 'return hs.screenRecordingState(true)' 2>/dev/null)
 
 print "Accessibility: ${ACCESSIBILITY}"
 print "Screen Recording: ${SCREEN_RECORDING}"

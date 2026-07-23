@@ -4,118 +4,355 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Anime Expeditions — Strategy Studio</title>
+  <title>ae mac</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">AE</div>
-        <div><h1>Strategy Studio</h1><p>King's Tomb automation editor</p></div>
+        <div class="brand-mark">ae</div>
+        <div>
+          <h1>anime expeditions mac</h1>
+          <p id="versionText">local build</p>
+        </div>
       </div>
-      <div class="top-actions">
-        <select id="strategySelect" aria-label="Saved strategy"></select>
-        <button id="newBtn" class="button ghost">New</button>
-        <button id="importBtn" class="button ghost">Import</button>
-        <button id="copyBtn" class="button ghost">Copy JSON</button>
-        <button id="saveBtn" class="button primary">Save Strategy</button>
+      <div class="run-controls">
+        <button id="startBtn" class="button primary">start</button>
+        <button id="pauseBtn" class="button" disabled>pause</button>
+        <button id="stopBtn" class="button danger" disabled>stop</button>
+      </div>
+      <div class="top-status">
+        <span id="runtimePill" class="pill idle"><i></i><span>idle</span></span>
+        <button id="minimizeBtn" class="icon-button" title="hide">—</button>
       </div>
     </header>
 
-    <section class="meta-strip">
-      <label>Name <input id="strategyName" maxlength="80"></label>
-      <label>Map <input id="mapName" maxlength="80"></label>
-      <label>Stage <input id="stageName" maxlength="50"></label>
-      <label>Difficulty <input id="difficultyName" maxlength="50"></label>
-      <label>Team
-        <select id="teamSelect">
-          <option value="current">Current</option>
-          <option value="1">Team 1</option><option value="2">Team 2</option>
-          <option value="3">Team 3</option><option value="4">Team 4</option>
-          <option value="5">Team 5</option><option value="6">Team 6</option>
-        </select>
-      </label>
-      <span id="dirtyBadge" class="badge clean">Saved</span>
-    </section>
+    <nav class="tabs" aria-label="main sections">
+      <button class="tab active" data-view="dashboard">dashboard</button>
+      <button class="tab" data-view="tasks">tasks <span id="taskCountBadge">1</span></button>
+      <button class="tab" data-view="strategy">strategy</button>
+      <button class="tab" data-view="positions">positions</button>
+      <button class="tab" data-view="settings">settings</button>
+    </nav>
 
-    <main class="workspace">
-      <section class="canvas-panel panel">
-        <div class="panel-heading">
-          <div><span class="eyebrow">Placement canvas</span><h2>Stage reference</h2></div>
-          <div class="canvas-actions">
-            <button id="captureBtn" class="button">↻ Capture Roblox</button>
-            <button id="recordBtn" class="button accent">● Record in Roblox</button>
-            <button id="previewBtn" class="button success">◇ Dry Preview</button>
+    <main class="views">
+      <section id="view-dashboard" class="view active">
+        <aside class="dashboard-side left-side">
+          <div class="section-title">status</div>
+          <div class="status-card">
+            <strong id="stateText">idle</strong>
+            <span id="currentTaskText">no active task</span>
+            <span id="uptimeText">uptime 00:00:00</span>
+          </div>
+
+          <div class="section-title">stats</div>
+          <div class="stats-grid">
+            <div><strong id="runsStat">0</strong><span>runs</span></div>
+            <div><strong id="winsStat">0</strong><span>wins</span></div>
+            <div><strong id="lossesStat">0</strong><span>losses</span></div>
+            <div><strong id="rateStat">0%</strong><span>win rate</span></div>
+          </div>
+
+          <div class="section-title">hotkeys</div>
+          <dl class="hotkeys">
+            <div><dt>f1</dt><dd>start / stop</dd></div>
+            <div><dt>f5</dt><dd>pause / resume</dd></div>
+            <div><dt>⌃⌥⌘ esc</dt><dd>emergency stop</dd></div>
+            <div><dt>⌃⌥⌘ g</dt><dd>show gui</dd></div>
+          </dl>
+
+          <div class="section-title">logs</div>
+          <div id="logList" class="log-list"></div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-toolbar">
+            <div>
+              <span class="eyebrow">roblox</span>
+              <strong id="previewLabel">current window</strong>
+            </div>
+            <div class="toolbar-actions">
+              <button id="alignBtn" class="button small">align</button>
+              <button id="captureBtn" class="button small">refresh preview</button>
+            </div>
+          </div>
+          <div id="dashboardPreview" class="roblox-preview">
+            <img id="dashboardImage" alt="roblox preview">
+            <div id="dashboardEmpty" class="preview-empty">
+              <strong>no preview yet</strong>
+              <span>click refresh preview</span>
+            </div>
+          </div>
+          <div class="progress-strip">
+            <div>
+              <span id="progressArea">ready</span>
+              <strong id="progressMessage">waiting for a run</strong>
+            </div>
+            <div class="progress-track"><i id="progressBar"></i></div>
+          </div>
+        </section>
+
+        <aside class="dashboard-side right-side">
+          <div class="section-title">run</div>
+          <label class="field">task
+            <select id="runTaskSelect"></select>
+          </label>
+          <label class="field">start from
+            <select id="runStartSelect">
+              <option value="auto">auto detect</option>
+              <option value="lobby">lobby</option>
+              <option value="finished_stage">finished stage</option>
+              <option value="repeat">results screen</option>
+              <option value="stage_ready">start game screen</option>
+            </select>
+          </label>
+          <button id="dashboardStartBtn" class="button primary wide">start selected task</button>
+
+          <div class="section-title">quick controls</div>
+          <button id="openTasksBtn" class="button wide">edit tasks</button>
+          <button id="openStrategyBtn" class="button wide">edit strategy</button>
+          <button id="openPositionsBtn" class="button wide">edit positions</button>
+          <button id="emergencyBtn" class="button danger wide">emergency stop</button>
+
+          <div class="section-title">ready checks</div>
+          <ul class="checks">
+            <li id="checkRoblox"><i></i>roblox window</li>
+            <li id="checkAccess"><i></i>accessibility</li>
+            <li id="checkScreen"><i></i>screen recording</li>
+            <li id="checkVision"><i></i>vision worker</li>
+            <li id="checkWebhook"><i></i>discord webhook</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section id="view-tasks" class="view">
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">queue</span>
+            <h2>tasks</h2>
+            <p>no task limit. drag or use the arrows to change the order.</p>
+          </div>
+          <div class="toolbar-actions">
+            <button id="addTaskBtn" class="button">add task</button>
+            <button id="duplicateTaskBtn" class="button">duplicate selected</button>
+            <button id="saveTasksBtn" class="button primary">save tasks</button>
           </div>
         </div>
-
-        <div id="stageCanvas" class="stage-canvas" aria-label="Clickable Roblox stage screenshot">
-          <img id="stageImage" alt="Roblox capture" draggable="false">
-          <div id="emptyCanvas" class="empty-canvas">
-            <div class="empty-icon">⌗</div>
-            <strong>No stage capture yet</strong>
-            <span>Open a stage and choose Capture Roblox</span>
-          </div>
-          <div id="markerLayer" class="marker-layer"></div>
-          <div class="canvas-grid"></div>
-          <div id="coordinateReadout" class="coordinate-readout">x — · y —</div>
+        <div class="task-table-wrap">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>on</th><th>name</th><th>mode</th><th>reps</th><th>map</th>
+                <th>stage</th><th>difficulty</th><th>team</th><th>strategy</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="taskRows"></tbody>
+          </table>
         </div>
-
-        <div class="placement-dock">
-          <div class="dock-section units-section">
-            <span class="dock-label">Unit slot</span>
-            <div id="unitSlots" class="unit-slots" role="radiogroup"></div>
+        <div class="page-footer">
+          <div class="task-options">
+            <label class="check-field"><input id="taskStartOver" type="checkbox"> loop queue after the last task</label>
+            <span id="taskSelectionText">no task selected</span>
           </div>
-          <div class="dock-section compact-fields">
-            <label>After place <input id="placeDelay" type="number" min="0" step="100" value="500"><span>ms</span></label>
-            <label>Upgrade
-              <select id="upgradeTarget">
-                <option value="0">None</option><option value="1">+1</option><option value="2">+2</option>
-                <option value="3">+3</option><option value="4">+4</option><option value="5">+5</option>
-                <option value="max">Max</option>
+          <div class="task-details">
+            <label class="field">challenge cap type
+              <select id="taskChallengeKind">
+                <option value="">auto / not a challenge</option>
+                <option value="regular_side">regular side</option>
+                <option value="hourly">hourly</option>
+                <option value="daily">daily</option>
+                <option value="weekly">weekly</option>
               </select>
             </label>
-            <label>Ability
-              <select id="abilityMode"><option value="off">Off</option><option value="once">Once</option><option value="auto">Auto</option></select>
+            <label class="field route-json">custom lobby navigation actions
+              <textarea id="taskRouteJson" rows="5" spellcheck="false" placeholder='[{"type":"click","point":{"x":80,"y":390},"wait_ms":800}]'></textarea>
             </label>
-            <label>Target
-              <select id="targetMode"><option value="first">First</option><option value="last">Last</option><option value="strongest">Strongest</option><option value="weakest">Weakest</option><option value="closest">Closest</option><option value="flying">Flying</option></select>
+            <label class="field team-route-json">custom team selection actions
+              <textarea id="taskTeamRouteJson" rows="5" spellcheck="false" placeholder='[{"type":"key","key":"h","wait_ms":800}]'></textarea>
             </label>
           </div>
-          <div class="dock-hint"><kbd>Click</kbd> canvas to add selected unit · drag markers to adjust</div>
         </div>
       </section>
 
-      <aside class="timeline-panel panel">
-        <div class="panel-heading timeline-heading">
-          <div><span class="eyebrow">Execution order</span><h2>Action timeline</h2></div>
-          <span id="actionCount" class="counter">0 actions</span>
+      <section id="view-strategy" class="view">
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">battle flow</span>
+            <h2>strategy actions</h2>
+            <p>actions run by timestamp. auto upgrade uses the circular-arrow button.</p>
+          </div>
+          <div class="toolbar-actions">
+            <select id="strategySelect"></select>
+            <button id="newStrategyBtn" class="button">new</button>
+            <button id="saveStrategyBtn" class="button primary">save strategy</button>
+          </div>
         </div>
-        <div class="action-toolbar">
-          <button data-add="wait">+ Wait</button>
-          <button data-add="upgrade">+ Upgrade</button>
-          <button data-add="ability">+ Ability</button>
-          <button data-add="target">+ Target</button>
-          <button data-add="sell">+ Sell</button>
+        <div class="strategy-meta">
+          <label class="field">name <input id="strategyName"></label>
+          <label class="field">map <input id="strategyMap"></label>
+          <label class="field">stage <input id="strategyStage"></label>
+          <label class="field">difficulty <input id="strategyDifficulty"></label>
+          <label class="field">team <select id="strategyTeam"></select></label>
         </div>
-        <div id="timeline" class="timeline"></div>
-        <div id="emptyTimeline" class="empty-timeline"><strong>No actions yet</strong><span>Capture a stage, then click placement positions.</span></div>
-        <div class="timeline-footer">
-          <button id="deleteStrategyBtn" class="text-danger">Delete strategy</button>
-          <span>Drag cards to reorder</span>
+        <div class="strategy-workspace">
+          <div class="action-sidebar">
+            <div class="section-title">add action</div>
+            <button data-add-action="place" class="button wide">place unit</button>
+            <button data-add-action="auto_upgrade" class="button wide">auto upgrade</button>
+            <button data-add-action="upgrade" class="button wide">upgrade</button>
+            <button data-add-action="ability" class="button wide">ability</button>
+            <button data-add-action="target" class="button wide">priority</button>
+            <button data-add-action="sell" class="button wide">sell</button>
+            <button data-add-action="wait" class="button wide">wait</button>
+            <div class="section-title">tools</div>
+            <button id="previewStrategyBtn" class="button wide">dry preview</button>
+            <button id="copyStrategyBtn" class="button wide">copy json</button>
+            <button id="importStrategyBtn" class="button wide">import json</button>
+          </div>
+          <div class="action-list-wrap">
+            <div id="actionList" class="action-list"></div>
+            <div id="actionEmpty" class="empty-state">no actions yet</div>
+          </div>
         </div>
-      </aside>
+      </section>
+
+      <section id="view-positions" class="view">
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">map editor</span>
+            <h2>positions</h2>
+            <p>each mode/map/stage/difficulty gets its own saved bird's-eye image.</p>
+          </div>
+          <div class="toolbar-actions">
+            <button id="captureMapBtn" class="button">capture current map</button>
+            <button id="savePositionsBtn" class="button primary">save positions</button>
+          </div>
+        </div>
+        <div class="positions-workspace">
+          <aside class="position-sidebar">
+            <label class="field">unit slot
+              <select id="positionUnitSlot">
+                <option value="1">slot 1</option><option value="2">slot 2</option>
+                <option value="3">slot 3</option><option value="4">slot 4</option>
+                <option value="5">slot 5</option><option value="6">slot 6</option>
+              </select>
+            </label>
+            <div class="section-title">selected placement</div>
+            <label class="field">x <input id="positionX" type="number" min="0" max="816" step="0.1"></label>
+            <label class="field">y <input id="positionY" type="number" min="0" max="638" step="0.1"></label>
+            <label class="field">time (ms) <input id="positionTime" type="number" min="0" step="500" value="25000"></label>
+            <label class="check-field"><input id="positionAutoUpgrade" type="checkbox"> add auto upgrade after this unit</label>
+            <button id="deletePositionBtn" class="button danger wide">delete selected</button>
+            <div class="position-help">click the map to add a unit. drag a marker to adjust it.</div>
+          </aside>
+          <div id="positionCanvas" class="position-canvas">
+            <img id="positionImage" alt="saved bird's-eye map" draggable="false">
+            <div id="positionEmpty" class="preview-empty">
+              <strong>no map image</strong>
+              <span>load a stage and capture the map</span>
+            </div>
+            <div id="positionMarkers" class="marker-layer"></div>
+            <div id="positionCoords" class="coordinate-readout">x — · y —</div>
+          </div>
+          <aside class="map-settings">
+            <div class="section-title">map</div>
+            <label class="field">mode <select id="positionMode"></select></label>
+            <label class="field">map <input id="positionMap"></label>
+            <label class="field">stage <select id="positionStage"></select></label>
+            <label class="field">difficulty <select id="positionDifficulty"></select></label>
+            <button id="loadMapImageBtn" class="button wide">load saved image</button>
+            <button id="dryPositionBtn" class="button wide">dry preview in roblox</button>
+          </aside>
+        </div>
+      </section>
+
+      <section id="view-settings" class="view">
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">profile</span>
+            <h2>settings</h2>
+            <p>crafting and challenges stay off until you enable them.</p>
+          </div>
+          <button id="saveSettingsBtn" class="button primary">save settings</button>
+        </div>
+        <div class="settings-grid">
+          <section class="settings-card">
+            <h3>runs</h3>
+            <label class="field">default start
+              <select id="settingStartAction">
+                <option value="auto">auto detect</option><option value="lobby">lobby</option>
+                <option value="finished_stage">finished stage</option><option value="repeat">results screen</option>
+                <option value="stage_ready">start game screen</option>
+              </select>
+            </label>
+            <label class="check-field"><input id="settingAlign" type="checkbox"> align roblox before runs</label>
+            <label class="check-field"><input id="settingCamera" type="checkbox"> automatic bird's-eye camera</label>
+            <label class="check-field"><input id="settingDiagnostics" type="checkbox"> save diagnostic screenshots</label>
+            <label class="check-field"><input id="settingReturnLobby" type="checkbox"> allow planned return to lobby between different tasks</label>
+          </section>
+
+          <section class="settings-card">
+            <h3>camera</h3>
+            <label class="field">zoom-in presses <input id="settingZoomIn" type="number" min="1" max="40"></label>
+            <label class="field">ground pitch drags <input id="settingPitchDrags" type="number" min="1" max="5"></label>
+            <label class="field">zoom-out amount <input id="settingZoomOut" type="number" min="-50" max="-1"></label>
+            <label class="field">settle time (ms) <input id="settingSettle" type="number" min="200" step="100"></label>
+          </section>
+
+          <section class="settings-card">
+            <h3>auto craft</h3>
+            <label class="check-field"><input id="settingCraftEnabled" type="checkbox"> enable auto craft</label>
+            <label class="field">craft every <input id="settingCraftEvery" type="number" min="1"><span>mastery wins</span></label>
+            <label class="field">recipe <input value="sprite (rainbow)" disabled></label>
+            <label class="field">ingredient <input value="sprite (grey) · 30" disabled></label>
+            <label class="check-field warning"><input id="settingCraftConfirmed" type="checkbox"> i understand this uses 30 grey sprites through the normal craft button</label>
+            <p class="note">quick craft is always blocked.</p>
+            <label class="field workflow-json">workflow json
+              <textarea id="settingCraftWorkflow" rows="8" spellcheck="false"></textarea>
+            </label>
+          </section>
+
+          <section class="settings-card">
+            <h3>challenges</h3>
+            <label class="check-field"><input id="settingChallengesEnabled" type="checkbox"> check side challenges</label>
+            <label class="field">check every <input id="settingChallengeInterval" type="number" min="5"><span>minutes</span></label>
+            <label class="field">regular cap <input id="settingChallengeCap" type="number" min="1"></label>
+            <label class="field">hourly cap <input id="settingChallengeHourlyCap" type="number" min="1"></label>
+            <label class="field">daily cap <input id="settingChallengeDailyCap" type="number" min="1"></label>
+            <label class="field">weekly cap <input id="settingChallengeWeeklyCap" type="number" min="1"></label>
+            <label class="check-field"><input id="settingChallengeFallback" type="checkbox"> use saved counter if the ui is unreadable</label>
+            <p class="note">checks only happen in the lobby or after results.</p>
+            <div id="challengeStatusList" class="challenge-status-list"></div>
+          </section>
+
+          <section class="settings-card">
+            <h3>discord webhook</h3>
+            <label class="check-field"><input id="settingWebhookEnabled" type="checkbox"> enable webhook events</label>
+            <label class="field">webhook url <input id="webhookUrl" type="password" placeholder="stored in macos keychain"></label>
+            <label class="check-field"><input id="settingWebhookScreenshot" type="checkbox"> include result screenshot</label>
+            <div class="button-row">
+              <button id="saveWebhookBtn" class="button">save to keychain</button>
+              <button id="testWebhookBtn" class="button">send test</button>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <h3>teams</h3>
+            <div id="teamSettings"></div>
+            <button id="addTeamBtn" class="button">add team</button>
+          </section>
+        </div>
+      </section>
     </main>
 
     <footer class="statusbar">
-      <span><i class="status-dot safe"></i> Input remains disarmed while editing</span>
-      <span id="statusText">Connecting to Hammerspoon…</span>
-      <span id="capturePath"></span>
+      <span><i id="inputDot" class="status-dot"></i><span id="inputStatus">input disarmed</span></span>
+      <span id="footerMessage">ready</span>
+      <span id="saveState">saved</span>
     </footer>
   </div>
   <div id="toast" class="toast" role="status"></div>
   <script src="app.js"></script>
 </body>
 </html>
-

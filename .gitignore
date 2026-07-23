@@ -7,6 +7,8 @@ runtime/captures/*
 runtime/diagnostics/*
 runtime/logs/*
 runtime/checkpoint.json
+runtime/challenges.json
+runtime/challenges-*.png
 runtime/bin/
 !runtime/captures/.gitkeep
 !runtime/diagnostics/.gitkeep

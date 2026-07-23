@@ -1,51 +1,217 @@
 {
   "schema_version": 1,
-  "name": "King's Tomb Mastery calibration",
-  "reference_resolution": { "w": 816, "h": 638 },
+  "name": "ae mac default",
+  "reference_resolution": {
+    "w": 816,
+    "h": 638
+  },
   "roblox": {
     "bundle_id": "com.roblox.RobloxPlayer",
     "application_name": "Roblox",
-    "content_insets": { "left": 0, "right": 0, "top": 18, "bottom": 0 }
+    "content_insets": {
+      "left": 0,
+      "right": 0,
+      "top": 18,
+      "bottom": 0
+    }
   },
   "vision": {
     "port": 47681,
     "default_match_threshold": 0.86
   },
-  "hotkeys": {
-    "stop": { "modifiers": ["ctrl", "alt", "cmd"], "key": "escape" },
-    "permissions": { "modifiers": ["ctrl", "alt", "cmd"], "key": "p" },
-    "align": { "modifiers": ["ctrl", "alt", "cmd"], "key": "l" },
-    "capture": { "modifiers": ["ctrl", "alt", "cmd"], "key": "c" },
-    "mark": { "modifiers": ["ctrl", "alt", "cmd"], "key": "m" },
-    "arm": { "modifiers": ["ctrl", "alt", "cmd"], "key": "a" },
-    "click": { "modifiers": ["ctrl", "alt", "cmd"], "key": "return" },
-    "gui": { "modifiers": ["ctrl", "alt", "cmd"], "key": "g" }
+  "runtime": {
+    "start_action": "auto",
+    "align_before_run": true,
+    "auto_camera": true,
+    "save_diagnostics": true,
+    "timing_multiplier": 1,
+    "allow_return_to_lobby": true,
+    "queue_start_over": false
   },
+  "camera": {
+    "zoom_in_presses": 18,
+    "pitch_drags": 2,
+    "pitch_from": {
+      "x": 408,
+      "y": 540
+    },
+    "pitch_to": {
+      "x": 408,
+      "y": 80
+    },
+    "pitch_duration_ms": 900,
+    "zoom_out_delta": -20,
+    "settle_ms": 1800
+  },
+  "navigation": {
+    "load_wait_ms": 4500,
+    "load_timeout_ms": 90000,
+    "stage_start_timeout_ms": 45000,
+    "lobby_load_wait_ms": 18000,
+    "lobby_load_timeout_ms": 90000,
+    "result_timeout_ms": 600000
+  },
+  "hotkeys": {
+    "start": {
+      "modifiers": [],
+      "key": "f1"
+    },
+    "pause": {
+      "modifiers": [],
+      "key": "f5"
+    },
+    "stop": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "escape"
+    },
+    "permissions": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "p"
+    },
+    "align": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "l"
+    },
+    "capture": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "c"
+    },
+    "mark": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "m"
+    },
+    "arm": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "a"
+    },
+    "click": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "return"
+    },
+    "gui": {
+      "modifiers": [
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "key": "g"
+    }
+  },
+  "teams": [
+    {
+      "id": "current",
+      "name": "current equipped team"
+    },
+    {
+      "id": "1",
+      "name": "team 1"
+    }
+  ],
   "tasks": [
     {
       "enabled": true,
-      "name": "King's Tomb Act 1 Mastery",
+      "name": "king's tomb act 1 mastery",
       "mode": "Story",
       "map": "King's Tomb",
       "stage": "Act 1",
       "difficulty": "Mastery",
       "team": "current",
-      "strategy": "pending-live-calibration",
+      "strategy": "kings-tomb-act-1-mastery",
       "repetitions": 1,
       "infinite": false,
-      "retry": { "maximum_consecutive_failures": 3, "on_exhausted": "stop" }
+      "retry": {
+        "maximum_consecutive_failures": 2,
+        "on_exhausted": "stop"
+      }
     }
   ],
   "crafting": {
     "enabled": false,
-    "trigger": { "type": "mastery_victories", "every": 10 },
+    "live_confirmation": false,
+    "trigger": {
+      "type": "mastery_victories",
+      "every": 20
+    },
+    "workflow": [
+      {
+        "type": "click",
+        "point": { "x": 30, "y": 393 },
+        "wait_ms": 800,
+        "label": "open areas"
+      },
+      {
+        "type": "click",
+        "point": { "x": 323, "y": 280 },
+        "wait_ms": 2500,
+        "label": "travel to crafting"
+      },
+      {
+        "type": "key",
+        "key": "e",
+        "repeats": 1,
+        "wait_ms": 900,
+        "label": "open crafting station"
+      },
+      {
+        "type": "click",
+        "point": { "x": 290, "y": 246 },
+        "wait_ms": 400,
+        "label": "select rainbow sprite"
+      },
+      {
+        "type": "click",
+        "point": { "x": 640, "y": 420 },
+        "wait_ms": 400,
+        "label": "set minimum craft amount"
+      },
+      {
+        "type": "click",
+        "point": { "x": 448, "y": 456 },
+        "wait_ms": 700,
+        "label": "craft rainbow sprite"
+      },
+      {
+        "type": "click",
+        "point": { "x": 660, "y": 169 },
+        "wait_ms": 500,
+        "label": "close crafting result"
+      }
+    ],
     "recipes": [
       {
         "enabled": true,
         "name": "Sprite (Rainbow)",
         "ingredient": "Sprite (Grey)",
-        "provisional_cost": 30,
-        "quantity": "maximum_affordable",
+        "ingredient_cost": 30,
+        "quantity": 1,
         "allow_quick_craft": false,
         "requires_live_confirmation": true
       }
@@ -54,12 +220,41 @@
   "challenges": {
     "enabled": false,
     "safe_checkpoints_only": true,
-    "kinds": ["regular_side", "hourly", "daily", "weekly"],
-    "fallback_counters": true
+    "check_interval_minutes": 30,
+    "regular_cap": 10,
+    "kinds": [
+      "regular_side",
+      "hourly",
+      "daily",
+      "weekly"
+    ],
+    "fallback_counters": true,
+    "caps": {
+      "regular_side": 10,
+      "hourly": 1,
+      "daily": 1,
+      "weekly": 1
+    },
+    "teams": {
+      "School Grounds": "1",
+      "Flower Forest": "1",
+      "Rose Kingdom": "1",
+      "Fairy King Forest": "1",
+      "King's Tomb": "1"
+    }
   },
   "webhooks": {
     "enabled": false,
     "keychain_service": "anime-expeditions-mac-discord-webhook",
-    "include_screenshot": true
+    "include_screenshot": true,
+    "events": [
+      "started",
+      "victory",
+      "defeat",
+      "stopped",
+      "error",
+      "craft",
+      "challenge"
+    ]
   }
 }
