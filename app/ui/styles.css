@@ -16,12 +16,12 @@
   --radius: 12px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
   color: var(--text);
-  background: var(--bg);
+  background: transparent;
 }
 
 * { box-sizing: border-box; }
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { background: radial-gradient(circle at 20% -15%, #362515 0, transparent 34%), var(--bg); }
+html, body { background: transparent; }
 button, input, select { font: inherit; }
 button { color: inherit; }
 h1, h2, h3, p { margin: 0; }
@@ -39,7 +39,7 @@ h1, h2, h3, p { margin: 0; }
   align-items: center;
   padding: 9px 16px;
   border-bottom: 1px solid var(--line);
-  background: rgba(13, 16, 21, .94);
+  background: var(--bg);
 }
 
 .brand { display: flex; align-items: center; gap: 11px; }
@@ -108,7 +108,7 @@ h1, h2, h3, p { margin: 0; }
   gap: 3px;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
-  background: rgba(18, 21, 28, .95);
+  background: #12151c;
 }
 .tab {
   height: 41px;
@@ -143,7 +143,7 @@ h1, h2, h3, p { margin: 0; }
 .view.active { display: grid; }
 
 #view-dashboard { grid-template-columns: 238px minmax(420px, 1fr) 250px; }
-.dashboard-side { min-height: 0; padding: 13px; background: rgba(18, 22, 29, .84); }
+.dashboard-side { min-height: 0; padding: 13px; background: #12161d; }
 .left-side { border-right: 1px solid var(--line); overflow: auto; }
 .right-side { border-left: 1px solid var(--line); overflow: auto; }
 .section-title {
@@ -246,51 +246,61 @@ h1, h2, h3, p { margin: 0; }
 .preview-panel {
   min-width: 0;
   min-height: 0;
-  padding: 13px;
+  padding: 6px;
   display: grid;
-  grid-template-rows: 42px minmax(0, 1fr) 52px;
+  grid-template-rows: 36px minmax(0, 1fr) 44px;
+  background: transparent;
+  overflow: hidden;
+}
+.preview-toolbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
   background: #0b0e13;
 }
-.preview-toolbar { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .preview-toolbar > div:first-child { display: flex; flex-direction: column; }
 .preview-toolbar strong { font-size: 12px; }
 .toolbar-actions { display: flex; align-items: center; gap: 7px; }
-.live-indicator {
+.dock-indicator {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #79dca8;
+  color: var(--muted);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .5px;
   text-transform: uppercase;
 }
-.live-indicator i {
+.dock-indicator i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #50d18b;
-  box-shadow: 0 0 8px rgba(80, 209, 139, .75);
+  background: #687180;
 }
-.live-indicator.paused { color: var(--muted); }
-.live-indicator.paused i { background: #687180; box-shadow: none; }
+.dock-indicator.docked { color: #79dca8; }
+.dock-indicator.docked i { background: #50d18b; box-shadow: 0 0 8px rgba(80, 209, 139, .75); }
 .eyebrow { display: block; margin-bottom: 3px; color: var(--gold); font-size: 9px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
 .roblox-preview {
   position: relative;
-  width: min(100%, calc((100vh - 220px) * 816 / 638));
-  max-height: 100%;
+  width: 816px;
+  height: 656px;
+  max-width: none;
+  max-height: none;
   align-self: center;
   justify-self: center;
-  aspect-ratio: 816 / 638;
   overflow: hidden;
   border: 1px solid #354050;
   border-radius: 10px;
-  background: #080a0e;
-  box-shadow: 0 16px 50px rgba(0, 0, 0, .36);
+  background: transparent;
+  box-shadow: 0 0 0 9999px #0b0e13;
 }
-.roblox-preview img, .position-canvas > img { width: 100%; height: 100%; object-fit: fill; display: none; }
-.roblox-preview.has-image img, .position-canvas.has-image > img { display: block; }
-.roblox-preview.has-image .preview-empty, .position-canvas.has-image > .preview-empty { display: none; }
+.position-canvas > img { width: 100%; height: 100%; object-fit: fill; display: none; }
+.position-canvas.has-image > img { display: block; }
+.roblox-preview.docked { border-color: transparent; box-shadow: 0 0 0 9999px #0b0e13; }
+.roblox-preview.docked .preview-empty, .position-canvas.has-image > .preview-empty { display: none; }
 .preview-empty {
   position: absolute;
   inset: 0;
@@ -303,12 +313,22 @@ h1, h2, h3, p { margin: 0; }
 }
 .preview-empty strong { color: #c9ced6; font-size: 13px; }
 .preview-empty span { font-size: 10px; }
-.progress-strip { align-self: end; display: grid; gap: 8px; padding: 9px 2px 0; }
+.progress-strip {
+  position: relative;
+  z-index: 2;
+  align-self: end;
+  display: grid;
+  gap: 8px;
+  padding: 9px 2px 0;
+  background: #0b0e13;
+}
 .progress-strip > div:first-child { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; }
 .progress-strip span { color: var(--gold); text-transform: uppercase; font-weight: 800; }
 .progress-strip strong { color: var(--muted); font-weight: 550; }
 .progress-track { height: 4px; overflow: hidden; border-radius: 4px; background: #252c36; }
 .progress-track i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, var(--orange), var(--gold)); transition: width .25s ease; }
+
+#view-tasks, #view-strategy, #view-positions, #view-settings { background: var(--bg); }
 
 .field { display: grid; gap: 5px; margin-bottom: 10px; color: var(--muted); font-size: 10px; font-weight: 650; }
 .field > span { color: #757f8e; font-weight: 500; }

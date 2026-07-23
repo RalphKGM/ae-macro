@@ -12,7 +12,7 @@ local Challenges = require("app.features.challenges")
 local Webhooks = require("app.features.webhooks")
 local Navigation = require("app.features.navigation")
 local MapStore = require("app.features.map_store")
-local Capture = require("app.platform.capture")
+local RobloxWindow = require("app.platform.roblox_window")
 
 local passed = 0
 local function test(name, fn)
@@ -174,43 +174,25 @@ test("v0.4 map image names cover story raid and expedition", function()
   }) == "/project/assets/maps/v4/Expedition_FlowerForest_Exp.png")
 end)
 
-test("live preview crops the title bar and stays in memory", function()
-  local croppedRect
-  local resizedTo
-  local fakeImage = {
-    size = function() return { w = 2026, h = 1620 } end,
-    croppedCopy = function(_, rect)
-      croppedRect = rect
-      return {
-        setSize = function(_, size, absolute)
-          resizedTo = { w = size.w, h = size.h, absolute = absolute }
-          return {
-            encodeAsURLString = function(_, scale, kind)
-              assert(scale == true and kind == "JPEG")
-              return "data:image/jpeg;base64,preview"
-            end,
-          }
-        end,
-      }
-    end,
-  }
+test("roblox docks its content inside the gui hole", function()
+  local target
   local fakeWindow = {
-    snapshot = function() return fakeImage end,
-    frame = function() return { x = 0, y = 0, w = 1013, h = 810 } end,
+    isFullScreen = function() return false end,
+    setFrame = function(_, frame) target = frame end,
   }
-  _G.hs = { timer = { secondsSinceEpoch = function() return 1 end } }
-  local capture = Capture.new("/project", {
-    find = function() return fakeWindow end,
-  }, {})
-  local preview = capture:preview({
-    roblox = { content_insets = { top = 18 } },
-    reference_resolution = { w = 816, h = 638 },
-  })
-  assert(croppedRect.x == 0 and croppedRect.y == 36)
-  assert(croppedRect.w == 2026 and croppedRect.h == 1584)
-  assert(resizedTo.w == 816 and resizedTo.h == 638 and resizedTo.absolute == true)
-  assert(preview.image_url == "data:image/jpeg;base64,preview")
-  _G.hs = nil
+  local roblox = RobloxWindow.new({
+    content_insets = { left = 0, right = 0, top = 18, bottom = 0 },
+  }, { info = function() end })
+  roblox.find = function()
+    return fakeWindow
+  end
+  roblox:setDockContentFrame({ x = 400, y = 180, w = 816, h = 638 })
+  local window = roblox:align({ w = 816, h = 638 })
+  assert(window == fakeWindow)
+  assert(target.x == 400 and target.y == 162)
+  assert(target.w == 816 and target.h == 656)
+  roblox:setDockContentFrame(nil)
+  assert(roblox.dock_content_frame == nil)
 end)
 
 test("profile schema rejects automation points outside the canvas", function()

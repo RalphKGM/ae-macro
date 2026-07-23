@@ -33,9 +33,9 @@ function Controller.new(options)
     content = nil,
     menu = nil,
     previewTimer = nil,
-    livePreviewTimer = nil,
-    livePreviewEnabled = true,
-    livePreviewError = nil,
+    dockTimer = nil,
+    dockOffset = nil,
+    dockScreenFrame = nil,
   }, Controller)
 end
 
@@ -109,10 +109,10 @@ end
 function Controller:_makeWindow()
   local screen = hs.screen.mainScreen():frame()
   local frame = {
-    x = screen.x + 20,
-    y = screen.y + 20,
-    w = math.max(980, screen.w - 40),
-    h = math.max(700, screen.h - 40),
+    x = screen.x + 8,
+    y = screen.y + 8,
+    w = math.max(980, screen.w - 16),
+    h = math.max(700, screen.h - 16),
   }
   self.content = hs.webview.usercontent.new("animeMacroBridge")
   self.content:setCallback(function(message)
@@ -142,11 +142,12 @@ function Controller:_makeWindow()
     :allowTextEntry(true)
     :allowGestures(false)
     :allowNewWindows(false)
-    :windowStyle({ "titled", "closable", "resizable", "miniaturizable" })
+    :windowStyle({ "borderless" })
     :windowTitle("anime expeditions mac")
     :closeOnEscape(true)
     :deleteOnClose(false)
     :darkMode(true)
+    :transparent(true)
   self.webview:html(html)
   return true
 end
@@ -157,12 +158,12 @@ function Controller:show()
     if not ok then hs.showError("ae gui: " .. tostring(err)) return nil, err end
   end
   self.webview:show():bringToFront(true)
-  self:_startLivePreview()
+  self:_startDockTracking()
   return true
 end
 
 function Controller:hide()
-  self:_stopLivePreview()
+  self:_stopDockTracking()
   if self.webview then self.webview:hide() end
 end
 
@@ -170,49 +171,100 @@ function Controller:toggle()
   if self.webview and self.webview:isVisible() then self:hide() else self:show() end
 end
 
-function Controller:_capturePreview()
-  local result, err = self.capture:preview(self.profile)
-  if not result then
-    if self.livePreviewError ~= err then
-      self.livePreviewError = err
-      self:_send("preview_status", { live = false, message = err or "Roblox preview unavailable" })
-    end
+function Controller:_dockFrame()
+  if not self.webview or not self.dockOffset then return nil end
+  local frame = self.webview:frame()
+  return {
+    x = frame.x + self.dockOffset.x,
+    y = frame.y + self.dockOffset.y,
+    w = self.dockOffset.w,
+    h = self.dockOffset.h,
+  }
+end
+
+function Controller:_placeRobloxInDock(focus)
+  local frame = self:_dockFrame()
+  if not frame then return nil, "dock geometry is not ready" end
+  self.roblox:setDockContentFrame(frame)
+  local window, err = self.roblox:align(self.profile.reference_resolution)
+  if not window then
+    self:_send("dock_status", { docked = false, message = err })
     return nil, err
   end
-  self.livePreviewError = nil
-  self:_send("preview", {
-    image_url = result.image_url,
-    label = "live roblox · " .. os.date("%H:%M:%S"),
-    capture_ms = result.capture_ms,
-  })
-  return true
+  self.dockScreenFrame = frame
+  self:_send("dock_status", { docked = true, message = "roblox docked", frame = frame })
+  if focus then
+    hs.timer.doAfter(0.08, function()
+      local focused = self.roblox:focus()
+      if not focused then self:_send("dock_status", { docked = false, message = "could not focus roblox" }) end
+    end)
+  end
+  return window
 end
 
-function Controller:_stopLivePreview()
-  if self.livePreviewTimer then self.livePreviewTimer:stop() self.livePreviewTimer = nil end
-end
-
-function Controller:_startLivePreview()
-  self:_stopLivePreview()
-  if not self.livePreviewEnabled or not self.webview or not self.webview:isVisible() then return end
-  self:_capturePreview()
-  self.livePreviewTimer = hs.timer.doEvery(0.5, function()
-    if not self.webview or not self.webview:isVisible() or not self.livePreviewEnabled then
-      self:_stopLivePreview()
-      return
-    end
-    self:_capturePreview()
+function Controller:_readDockGeometry(callback)
+  if not self.webview then callback(nil, "gui is not open") return end
+  self.webview:evaluateJavaScript([[
+    JSON.stringify((() => {
+      const element = document.getElementById("dashboardPreview");
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+    })())
+  ]], function(result, javascriptError)
+    if not result then callback(nil, tostring(javascriptError or "dock element unavailable")) return end
+    local ok, rect = pcall(hs.json.decode, result)
+    if not ok or type(rect) ~= "table" then callback(nil, "invalid dock geometry") return end
+    callback(rect)
   end)
 end
 
-function Controller:_setLivePreview(enabled)
-  self.livePreviewEnabled = enabled ~= false
-  if self.livePreviewEnabled then
-    self:_startLivePreview()
-  else
-    self:_stopLivePreview()
-    self:_send("preview_status", { live = false, message = "preview paused" })
-  end
+function Controller:_alignRobloxToDock(focus)
+  self:_readDockGeometry(function(rect, err)
+    if not rect then
+      self:_send("dock_status", { docked = false, message = err })
+      return
+    end
+    local reference = self.profile.reference_resolution
+    local insets = self.profile.roblox.content_insets or {}
+    local outerWidth = reference.w + (insets.left or 0) + (insets.right or 0)
+    local outerHeight = reference.h + (insets.top or 0) + (insets.bottom or 0)
+    if math.abs(rect.w - outerWidth) > 1 or math.abs(rect.h - outerHeight) > 1 then
+      self:_send("dock_status", {
+        docked = false,
+        message = string.format("dock must be %dx%d; got %.0fx%.0f", outerWidth, outerHeight, rect.w, rect.h),
+      })
+      return
+    end
+    self.dockOffset = {
+      x = rect.x + (insets.left or 0),
+      y = rect.y + (insets.top or 0),
+      w = reference.w,
+      h = reference.h,
+    }
+    self:_placeRobloxInDock(focus)
+  end)
+end
+
+function Controller:_stopDockTracking()
+  if self.dockTimer then self.dockTimer:stop() self.dockTimer = nil end
+end
+
+function Controller:_startDockTracking()
+  self:_stopDockTracking()
+  if not self.webview or not self.webview:isVisible() then return end
+  self:_alignRobloxToDock(true)
+  self.dockTimer = hs.timer.doEvery(0.25, function()
+    if not self.webview or not self.webview:isVisible() then
+      self:_stopDockTracking()
+      return
+    end
+    local frame = self:_dockFrame()
+    local previous = self.dockScreenFrame
+    if frame and (not previous or frame.x ~= previous.x or frame.y ~= previous.y) then
+      self:_placeRobloxInDock(false)
+    end
+  end)
 end
 
 function Controller:_captureMap(task)
@@ -285,16 +337,11 @@ function Controller:_handle(message)
   local payload = message.payload or {}
   if operation == "ready" then
     self:_bootstrap()
-    self:_startLivePreview()
+    self:_startDockTracking()
   elseif operation == "hide" then
     self:hide()
   elseif operation == "align" then
-    local _, err = self.roblox:align(self.profile.reference_resolution)
-    if err then self:_error(err) else self:_toast("roblox aligned") end
-  elseif operation == "capture_preview" then
-    self:_capturePreview()
-  elseif operation == "set_live_preview" then
-    self:_setLivePreview(payload.enabled)
+    self:_alignRobloxToDock(true)
   elseif operation == "capture_map" then
     self:_captureMap(payload.task)
   elseif operation == "load_map" then
@@ -368,15 +415,14 @@ function Controller:startMenu()
       end },
       { title = "stop", disabled = not running, fn = function() self.automation:stop("menu stop") end },
       { title = "-" },
-      { title = "align roblox", fn = function() self.roblox:align(self.profile.reference_resolution) end },
-      { title = "refresh preview", fn = function() self:_capturePreview() end },
+      { title = "align roblox", fn = function() self:_alignRobloxToDock(true) end },
       { title = "emergency stop", fn = function() self.automation:stop("menu emergency stop") end },
     }
   end)
 end
 
 function Controller:stop()
-  self:_stopLivePreview()
+  self:_stopDockTracking()
   if self.previewTimer then self.previewTimer:stop() self.previewTimer = nil end
   if self.webview then self.webview:delete(true) self.webview = nil end
   self.content = nil

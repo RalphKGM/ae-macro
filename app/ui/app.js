@@ -24,7 +24,6 @@
     actionDrag: null,
     sequence: 0,
     mapUrl: null,
-    livePreview: true,
     startedAt: null,
     dirty: false,
   };
@@ -83,23 +82,13 @@
     if (name === "positions") renderPositions();
   }
 
-  function setPreview(payload) {
-    const dashboard = $("#dashboardPreview");
-    $("#dashboardImage").src = payload.image_url;
-    dashboard.classList.add("has-image");
-    $("#previewLabel").textContent = payload.label || "current window";
-    const indicator = $("#livePreviewStatus");
-    indicator.classList.remove("paused");
-    indicator.lastChild.textContent = " live";
-  }
-
-  function setLivePreview(enabled) {
-    state.livePreview = enabled;
-    $("#captureBtn").textContent = enabled ? "pause preview" : "resume preview";
-    const indicator = $("#livePreviewStatus");
-    indicator.classList.toggle("paused", !enabled);
-    indicator.lastChild.textContent = enabled ? " live" : " paused";
-    bridge.send("set_live_preview", { enabled });
+  function setDockStatus(payload) {
+    const docked = !!payload.docked;
+    $("#dashboardPreview").classList.toggle("docked", docked);
+    const indicator = $("#dockStatus");
+    indicator.classList.toggle("docked", docked);
+    indicator.lastChild.textContent = docked ? " docked" : " waiting";
+    $("#previewLabel").textContent = payload.message || (docked ? "real roblox window" : "waiting for roblox");
   }
 
   function setMap(payload) {
@@ -551,7 +540,6 @@
     $("#openPositionsBtn").addEventListener("click", () => showView("positions"));
     $("#minimizeBtn").addEventListener("click", () => bridge.send("hide"));
     $("#alignBtn").addEventListener("click", () => bridge.send("align"));
-    $("#captureBtn").addEventListener("click", () => setLivePreview(!state.livePreview));
 
     const start = () => {
       state.selectedTask = number($("#runTaskSelect").value, state.selectedTask);
@@ -804,13 +792,8 @@
         loadStrategy(payload.strategy);
         if (payload.map) setMap(payload.map);
         log("gui ready");
-      } else if (event === "preview") {
-        setPreview(payload);
-      } else if (event === "preview_status") {
-        const unavailable = payload.live === false;
-        $("#livePreviewStatus").classList.toggle("paused", unavailable);
-        $("#livePreviewStatus").lastChild.textContent = unavailable ? " unavailable" : " live";
-        if (payload.message) $("#previewLabel").textContent = payload.message;
+      } else if (event === "dock_status") {
+        setDockStatus(payload);
       } else if (event === "map") {
         setMap(payload);
         if (payload.image_url) toast("map image loaded");

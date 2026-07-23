@@ -53,37 +53,4 @@ function Capture:normalized(vision, profile, output, callback)
   }, callback)
 end
 
-function Capture:preview(profile)
-  local window, err = self.roblox:find()
-  if not window then return nil, err end
-  local started = hs.timer.secondsSinceEpoch()
-  local image = window:snapshot(false)
-  if not image then return nil, "Roblox preview unavailable (check Screen Recording permission)" end
-
-  local size = image:size()
-  local frame = window:frame()
-  local insets = profile.roblox.content_insets or {}
-  local scaleX = size.w / frame.w
-  local scaleY = size.h / frame.h
-  local left = math.floor((insets.left or 0) * scaleX + 0.5)
-  local right = math.floor((insets.right or 0) * scaleX + 0.5)
-  local top = math.floor((insets.top or 0) * scaleY + 0.5)
-  local bottom = math.floor((insets.bottom or 0) * scaleY + 0.5)
-  local width = math.max(1, size.w - left - right)
-  local height = math.max(1, size.h - top - bottom)
-
-  local cropped = image:croppedCopy({ x = left, y = top, w = width, h = height })
-  if not cropped then return nil, "could not crop Roblox preview" end
-  local reference = profile.reference_resolution
-  local resized = cropped:setSize({ w = reference.w, h = reference.h }, true)
-  if not resized then return nil, "could not resize Roblox preview" end
-
-  return {
-    image_url = resized:encodeAsURLString(true, "JPEG"),
-    capture_ms = (hs.timer.secondsSinceEpoch() - started) * 1000,
-    width = reference.w,
-    height = reference.h,
-  }
-end
-
 return Capture
