@@ -64,17 +64,30 @@ def best_template_match(
 ) -> Match | None:
     search, offset_x, offset_y = crop_roi(image, roi)
     search_gray = cv2.cvtColor(search, cv2.COLOR_BGR2GRAY) if search.ndim == 3 else search
-    template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
+    search_for_match = search_gray
+    mask = None
+    if template.ndim == 3 and template.shape[2] == 4:
+        template_gray = template[:, :, :3]
+        search_for_match = search[:, :, :3] if search.ndim == 3 else cv2.cvtColor(search, cv2.COLOR_GRAY2BGR)
+        mask = template[:, :, 3]
+    else:
+        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
     best: Match | None = None
     for scale in scales:
         if scale <= 0:
             continue
         width = max(1, round(template_gray.shape[1] * scale))
         height = max(1, round(template_gray.shape[0] * scale))
-        if width > search_gray.shape[1] or height > search_gray.shape[0]:
+        if width > search_for_match.shape[1] or height > search_for_match.shape[0]:
             continue
         resized = cv2.resize(template_gray, (width, height), interpolation=cv2.INTER_AREA)
-        result = cv2.matchTemplate(search_gray, resized, cv2.TM_CCOEFF_NORMED)
+        resized_mask = None
+        method = cv2.TM_CCOEFF_NORMED
+        if mask is not None:
+            resized_mask = cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
+            method = cv2.TM_CCORR_NORMED
+        result = cv2.matchTemplate(search_for_match, resized, method, mask=resized_mask)
+        result = np.nan_to_num(result, nan=-1.0, posinf=-1.0, neginf=-1.0)
         _, score, _, location = cv2.minMaxLoc(result)
         candidate = Match(float(score), location[0] + offset_x, location[1] + offset_y, width, height, float(scale))
         if best is None or candidate.score > best.score:
@@ -91,4 +104,3 @@ def sample_color(image: np.ndarray, x: int, y: int, radius: int = 0) -> dict[str
         raise ValueError("sample point is outside the image")
     bgr = image[y0:y1, x0:x1].mean(axis=(0, 1))
     return {"r": float(bgr[2]), "g": float(bgr[1]), "b": float(bgr[0])}
-

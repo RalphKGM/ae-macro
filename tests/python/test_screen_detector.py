@@ -8,6 +8,7 @@ from vision.screen_detector import classify_screen
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
+TEMPLATES = Path(__file__).parents[2] / "assets" / "nav"
 
 
 @pytest.mark.parametrize(
@@ -52,3 +53,26 @@ def test_party_screen_beats_finished_stage_false_positive():
 
     assert result["state"] == "party_ready"
     assert result["confidence"] > 0
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("lobby-overlay.png", "lobby_overlay"),
+        ("mode-select.png", "mode_select"),
+        ("party-ready-live.png", "party_ready"),
+    ],
+)
+def test_v4_templates_identify_live_navigation_checkpoints(filename: str, expected: str):
+    image = cv2.imread(str(FIXTURES / filename))
+    assert image is not None
+    result = classify_screen(image, templates_dir=TEMPLATES)
+    assert result["state"] == expected
+    assert result["confidence"] >= 0.9
+
+
+def test_result_context_rejects_lobby_and_mode_screens():
+    for filename in ("lobby-overlay.png", "mode-select.png", "party-ready-live.png"):
+        image = cv2.imread(str(FIXTURES / filename))
+        result = classify_screen(image, templates_dir=TEMPLATES, context="result")
+        assert result["state"] == "unknown"

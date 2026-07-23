@@ -15,12 +15,14 @@ function ScreenDetector.new(options)
   }, ScreenDetector)
 end
 
-function ScreenDetector:detect(callback, label)
+function ScreenDetector:detect(callback, label, context)
   local path = self.root .. "/runtime/diagnostics/screen-" .. stamp() .. ".png"
   local id, err = self.capture:normalized(self.vision, self.profile, path, function(result, normalizeError)
     if not result then callback(nil, normalizeError) return end
     local requestId, requestError = self.vision:request("classify_screen", {
       image_path = result.output_path,
+      templates_dir = "assets/nav",
+      context = context,
     }, function(classification, classificationError)
       if classification then
         classification.image_path = result.output_path
@@ -28,6 +30,7 @@ function ScreenDetector:detect(callback, label)
           state = classification.state,
           confidence = classification.confidence,
           label = label,
+          context = context,
         })
       end
       callback(classification, classificationError)

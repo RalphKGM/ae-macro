@@ -43,6 +43,10 @@ function Navigation:_runActions(actions, index, progress, callback)
   elseif action.type == "key" then
     local ok, err = self.input:key(action.key, action.repeats or 1, action.interval_ms)
     nextAction(ok, err)
+  elseif action.type == "scroll" then
+    local point = action.point or { x = 408, y = 319 }
+    local ok, err = self.input:scrollAt(point, action.delta or 0, action.label, nextAction)
+    if not ok then callback(nil, err) end
   elseif action.type == "wait" then
     nextAction(true)
   else
@@ -73,7 +77,7 @@ function Navigation:_route(task)
       repeat_stage = task.repeat_stage or Catalog.results.repeat_stage,
     }
   end
-  return nil
+  return Catalog.routeFor(task)
 end
 
 function Navigation:_fromLobby(route, progress, callback)
@@ -82,13 +86,43 @@ function Navigation:_fromLobby(route, progress, callback)
     if not teamSuccess then callback(nil, teamError) return end
     self:_runActions(route.lobby, 1, progress, function(routeSuccess, routeError)
       if not routeSuccess then callback(nil, routeError) return end
-      self:_startParty(route, progress, callback)
+      self:_waitForPartyReady(route, progress, callback)
     end)
   end)
 end
 
-function Navigation:_waitForBattle(progress, callback, startedAt)
+function Navigation:_fromModeSelect(route, progress, callback)
+  self:_runActions(route.lobby, 2, progress, function(routeSuccess, routeError)
+    if not routeSuccess then callback(nil, routeError) return end
+    self:_waitForPartyReady(route, progress, callback)
+  end)
+end
+
+function Navigation:_waitForPartyReady(route, progress, callback, startedAt)
   startedAt = startedAt or (hs.timer.secondsSinceEpoch() * 1000)
+  if (hs.timer.secondsSinceEpoch() * 1000) - startedAt >= 15000 then
+    callback(nil, "navigation did not reach the private party screen")
+    return
+  end
+  progress("navigation", "confirming private party")
+  local id, err = self.detector:detect(function(result, detectError)
+    if self.cancelled then return end
+    if result and result.state == "party_ready" then
+      self:_startParty(route, progress, callback)
+      return
+    end
+    if detectError then self.logger:warn("party_ready_detection_failed", { error = detectError }) end
+    self:_after(900, function() self:_waitForPartyReady(route, progress, callback, startedAt) end)
+  end, "party ready")
+  if not id then
+    if err then self.logger:warn("party_ready_request_failed", { error = err }) end
+    self:_after(900, function() self:_waitForPartyReady(route, progress, callback, startedAt) end)
+  end
+end
+
+function Navigation:_waitForBattle(route, progress, callback, startedAt, attempts)
+  startedAt = startedAt or (hs.timer.secondsSinceEpoch() * 1000)
+  attempts = attempts or 1
   local elapsed = (hs.timer.secondsSinceEpoch() * 1000) - startedAt
   local timeout = self.profile.navigation.stage_start_timeout_ms or 45000
   if elapsed >= timeout then
@@ -100,22 +134,33 @@ function Navigation:_waitForBattle(progress, callback, startedAt)
     if self.cancelled then return end
     if not result then
       if detectError then self.logger:warn("battle_start_detection_failed", { error = detectError }) end
-      self:_after(1200, function() self:_waitForBattle(progress, callback, startedAt) end)
+      self:_after(1200, function() self:_waitForBattle(route, progress, callback, startedAt, attempts) end)
       return
     end
     if result.state == "battle" then
       callback(true)
       return
     end
+    if result.state == "stage_ready" and attempts < 4 then
+      progress("navigation", "start game still visible; retrying")
+      local clicked, clickError = self.input:click(route.start_game, "retry start game", function(success, helperError)
+        if not success then callback(nil, helperError) return end
+        self:_after(900, function()
+          self:_waitForBattle(route, progress, callback, startedAt, attempts + 1)
+        end)
+      end)
+      if not clicked then callback(nil, clickError) end
+      return
+    end
     if result.state == "victory" or result.state == "defeat" then
       callback(nil, "the previous result screen is still open after starting the stage")
       return
     end
-    self:_after(1200, function() self:_waitForBattle(progress, callback, startedAt) end)
+    self:_after(1200, function() self:_waitForBattle(route, progress, callback, startedAt, attempts) end)
   end, "battle start")
   if not id then
     if err then self.logger:warn("battle_start_request_failed", { error = err }) end
-    self:_after(1200, function() self:_waitForBattle(progress, callback, startedAt) end)
+    self:_after(1200, function() self:_waitForBattle(route, progress, callback, startedAt, attempts) end)
   end
 end
 
@@ -123,7 +168,7 @@ function Navigation:_startGame(route, progress, callback)
   progress("navigation", "starting stage")
   local ok, err = self.input:click(route.start_game, "start game", function(success, clickError)
     if not success then callback(nil, clickError) return end
-    self:_after(1200, function() self:_waitForBattle(progress, callback) end)
+    self:_after(1200, function() self:_waitForBattle(route, progress, callback) end)
   end)
   if not ok then callback(nil, err) end
 end
@@ -144,10 +189,6 @@ function Navigation:_waitForStageReady(route, progress, callback, startedAt)
     end
     if result.state == "stage_ready" then
       self:_startGame(route, progress, callback)
-      return
-    end
-    if result.state == "battle" then
-      callback(true)
       return
     end
     self:_after(1800, function() self:_waitForStageReady(route, progress, callback, startedAt) end)
@@ -277,6 +318,10 @@ function Navigation:start(task, startMode, progress, callback)
     end
     if mode == "lobby" then
       self:_fromLobby(route, progress, callback)
+      return
+    end
+    if mode == "mode_select" then
+      self:_fromModeSelect(route, progress, callback)
       return
     end
     callback(nil, "cannot start from detected screen: " .. tostring(mode))

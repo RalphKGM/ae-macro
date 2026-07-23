@@ -220,6 +220,7 @@ function Controller:_startDockInputForwarding()
     if not contains(self:_dockOuterFrame(), point) then return false end
     local window = self.roblox:find()
     if not window then return false end
+    if self.roblox:isFrontmost(window) then return false end
 
     local eventType = event:getType()
     local flags = event:getFlags()

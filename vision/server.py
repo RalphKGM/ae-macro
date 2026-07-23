@@ -87,7 +87,7 @@ class VisionService:
     def match(self, payload: dict[str, Any]) -> dict[str, Any]:
         image, image_path = self.image_for(payload)
         template_path = self.safe_path(payload["template_path"], must_exist=True)
-        template = read_image(template_path)
+        template = read_image(template_path, cv2.IMREAD_UNCHANGED)
         match = best_template_match(image, template, roi=payload.get("roi"), scales=payload.get("scales", [1.0]))
         if match is None:
             return {"matched": False, "reason": "template does not fit search region"}
@@ -166,7 +166,11 @@ class VisionService:
 
     def classify_screen(self, payload: dict[str, Any]) -> dict[str, Any]:
         image, image_path = self.image_for(payload)
-        return {"image_path": str(image_path), **classify_screen(image)}
+        templates = self.safe_path(payload.get("templates_dir", "assets/nav"), must_exist=True)
+        return {
+            "image_path": str(image_path),
+            **classify_screen(image, templates_dir=templates, context=payload.get("context")),
+        }
 
 
 class Handler(socketserver.StreamRequestHandler):

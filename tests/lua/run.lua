@@ -13,6 +13,7 @@ local Webhooks = require("app.features.webhooks")
 local Navigation = require("app.features.navigation")
 local MapStore = require("app.features.map_store")
 local RobloxWindow = require("app.platform.roblox_window")
+local Catalog = require("app.config.catalog")
 
 local passed = 0
 local function test(name, fn)
@@ -172,6 +173,20 @@ test("v0.4 map image names cover story raid and expedition", function()
   assert(maps:v4Path({
     mode = "Expedition", map = "Flower Forest", stage = "Act 1", difficulty = "Normal",
   }) == "/project/assets/maps/v4/Expedition_FlowerForest_Exp.png")
+end)
+
+test("v4 navigation builds routes for every supported mode", function()
+  local tasks = {
+    { mode = "Story", map = "Flower Forest", stage = "Act 2", difficulty = "Hard" },
+    { mode = "Raid", map = "Spirit City", stage = "Act 3", difficulty = "Hard" },
+    { mode = "Challenge", map = "Daily", stage = "Act 1", difficulty = "Normal" },
+    { mode = "Expedition", map = "Rose Kingdom", stage = "3", difficulty = "Normal" },
+  }
+  for _, task in ipairs(tasks) do
+    local route = Catalog.routeFor(task)
+    assert(route and #route.lobby >= 5)
+    assert(route.start_private_party.x == 450 and route.start_game.x == 408)
+  end
 end)
 
 test("roblox docks its content inside the gui hole", function()

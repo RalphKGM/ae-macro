@@ -226,6 +226,16 @@ function Input:scroll(delta, reason, callback)
   return self:_task(self.native_binary, { "scroll", tostring(math.floor(delta or 0)) }, reason, callback)
 end
 
+function Input:scrollAt(point, delta, reason, callback)
+  local ready, err = self:_ready()
+  if not ready then return nil, err end
+  local screenPoint, pointError = self:referencePoint(point)
+  if not screenPoint then return nil, pointError end
+  hs.mouse.absolutePosition(screenPoint)
+  hs.timer.usleep(80000)
+  return self:scroll(delta, reason, callback)
+end
+
 function Input:stop()
   self:endSession("shutdown")
   for task in pairs(self.click_tasks) do task:terminate() end
