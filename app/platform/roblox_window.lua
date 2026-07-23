@@ -40,6 +40,9 @@ function RobloxWindow:focus()
   local window, err = self:find()
   if not window then return nil, err end
   if window:isMinimized() then window:unminimize() end
+  local app = window:application()
+  if app then app:activate(true) end
+  window:raise()
   window:focus()
   return window
 end

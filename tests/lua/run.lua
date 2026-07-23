@@ -195,6 +195,23 @@ test("roblox docks its content inside the gui hole", function()
   assert(roblox.dock_content_frame == nil)
 end)
 
+test("roblox focus activates and raises its real window", function()
+  local calls = {}
+  local fakeApp = {
+    activate = function(_, allWindows) table.insert(calls, "activate:" .. tostring(allWindows)) end,
+  }
+  local fakeWindow = {
+    isMinimized = function() return false end,
+    application = function() return fakeApp end,
+    raise = function() table.insert(calls, "raise") end,
+    focus = function() table.insert(calls, "focus") end,
+  }
+  local roblox = RobloxWindow.new({}, {})
+  roblox.find = function() return fakeWindow end
+  assert(roblox:focus() == fakeWindow)
+  assert(table.concat(calls, "|") == "activate:true|raise|focus")
+end)
+
 test("profile schema rejects automation points outside the canvas", function()
   local profile = {
     schema_version = 1,

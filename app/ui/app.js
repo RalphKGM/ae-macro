@@ -80,6 +80,7 @@
     $$(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.view === name));
     $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${name}`));
     if (name === "positions") renderPositions();
+    bridge.send("view_changed", { view: name });
   }
 
   function setDockStatus(payload) {

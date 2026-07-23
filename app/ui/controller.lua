@@ -34,8 +34,10 @@ function Controller.new(options)
     menu = nil,
     previewTimer = nil,
     dockTimer = nil,
+    dockInputTap = nil,
     dockOffset = nil,
     dockScreenFrame = nil,
+    activeView = "dashboard",
   }, Controller)
 end
 
@@ -148,6 +150,7 @@ function Controller:_makeWindow()
     :deleteOnClose(false)
     :darkMode(true)
     :transparent(true)
+    :level(hs.drawing.windowLevels.normal)
   self.webview:html(html)
   return true
 end
@@ -157,7 +160,7 @@ function Controller:show()
     local ok, err = self:_makeWindow()
     if not ok then hs.showError("ae gui: " .. tostring(err)) return nil, err end
   end
-  self.webview:show():bringToFront(true)
+  self.webview:show():bringToFront(false):level(hs.drawing.windowLevels.normal)
   self:_startDockTracking()
   return true
 end
@@ -180,6 +183,60 @@ function Controller:_dockFrame()
     w = self.dockOffset.w,
     h = self.dockOffset.h,
   }
+end
+
+function Controller:_dockOuterFrame()
+  local content = self:_dockFrame()
+  if not content then return nil end
+  local insets = self.profile.roblox.content_insets or {}
+  return {
+    x = content.x - (insets.left or 0),
+    y = content.y - (insets.top or 0),
+    w = content.w + (insets.left or 0) + (insets.right or 0),
+    h = content.h + (insets.top or 0) + (insets.bottom or 0),
+  }
+end
+
+local function contains(frame, point)
+  return frame
+    and point.x >= frame.x and point.x < frame.x + frame.w
+    and point.y >= frame.y and point.y < frame.y + frame.h
+end
+
+function Controller:_stopDockInputForwarding()
+  if self.dockInputTap then self.dockInputTap:stop() self.dockInputTap = nil end
+end
+
+function Controller:_startDockInputForwarding()
+  self:_stopDockInputForwarding()
+  local mouseTypes = hs.eventtap.event.types
+  self.dockInputTap = hs.eventtap.new({
+    mouseTypes.leftMouseDown,
+    mouseTypes.rightMouseDown,
+  }, function(event)
+    if not self.webview or not self.webview:isVisible() then return false end
+    if self.activeView ~= "dashboard" then return false end
+    local point = event:location()
+    if not contains(self:_dockOuterFrame(), point) then return false end
+    local window = self.roblox:find()
+    if not window then return false end
+
+    local eventType = event:getType()
+    local flags = event:getFlags()
+    local tap = self.dockInputTap
+    tap:stop()
+    local focused = self.roblox:focus()
+    if not focused then
+      hs.timer.doAfter(0.05, function() if self.dockInputTap == tap then tap:start() end end)
+      return true
+    end
+    hs.timer.usleep(30000)
+    hs.eventtap.event.newMouseEvent(eventType, point):setFlags(flags):post()
+    self.logger:info("dock_input_forwarded", { x = point.x, y = point.y, event_type = eventType })
+    hs.timer.doAfter(0.05, function() if self.dockInputTap == tap then tap:start() end end)
+    return true
+  end)
+  self.dockInputTap:start()
 end
 
 function Controller:_placeRobloxInDock(focus)
@@ -248,11 +305,13 @@ end
 
 function Controller:_stopDockTracking()
   if self.dockTimer then self.dockTimer:stop() self.dockTimer = nil end
+  self:_stopDockInputForwarding()
 end
 
 function Controller:_startDockTracking()
   self:_stopDockTracking()
   if not self.webview or not self.webview:isVisible() then return end
+  self:_startDockInputForwarding()
   self:_alignRobloxToDock(true)
   self.dockTimer = hs.timer.doEvery(0.25, function()
     if not self.webview or not self.webview:isVisible() then
@@ -342,6 +401,9 @@ function Controller:_handle(message)
     self:hide()
   elseif operation == "align" then
     self:_alignRobloxToDock(true)
+  elseif operation == "view_changed" then
+    self.activeView = payload.view or "dashboard"
+    if self.activeView == "dashboard" then self:_alignRobloxToDock(true) end
   elseif operation == "capture_map" then
     self:_captureMap(payload.task)
   elseif operation == "load_map" then

@@ -56,7 +56,7 @@ check the install:
 4. leave `start from` on `auto detect`.
 5. press `start selected task`.
 
-the dashboard cuts out a transparent dock for the real roblox window. the game content stays 816x638 and the macos title bar sits inside the dock above it. this is not a screenshot or video preview. the positions tab is separate and shows the saved bird's-eye image for the selected mode, map, stage, and difficulty.
+the dashboard cuts out a transparent dock for the real roblox window. the game content stays 816x638 and the macos title bar sits inside the dock above it. this is not a screenshot or video preview. clicks in the dashboard cutout are forwarded to roblox; forwarding turns off on the task, strategy, positions, and settings pages. the positions tab is separate and shows the saved bird's-eye image for the selected mode, map, stage, and difficulty.
 
 the default profile uses the current equipped team. the default king's tomb strategy has six placements and adds auto upgrade to the dps placements.
 
