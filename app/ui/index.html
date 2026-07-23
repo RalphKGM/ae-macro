@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Anime Expeditions — Strategy Studio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">AE</div>
+        <div><h1>Strategy Studio</h1><p>King's Tomb automation editor</p></div>
+      </div>
+      <div class="top-actions">
+        <select id="strategySelect" aria-label="Saved strategy"></select>
+        <button id="newBtn" class="button ghost">New</button>
+        <button id="importBtn" class="button ghost">Import</button>
+        <button id="copyBtn" class="button ghost">Copy JSON</button>
+        <button id="saveBtn" class="button primary">Save Strategy</button>
+      </div>
+    </header>
+
+    <section class="meta-strip">
+      <label>Name <input id="strategyName" maxlength="80"></label>
+      <label>Map <input id="mapName" maxlength="80"></label>
+      <label>Stage <input id="stageName" maxlength="50"></label>
+      <label>Difficulty <input id="difficultyName" maxlength="50"></label>
+      <label>Team
+        <select id="teamSelect">
+          <option value="current">Current</option>
+          <option value="1">Team 1</option><option value="2">Team 2</option>
+          <option value="3">Team 3</option><option value="4">Team 4</option>
+          <option value="5">Team 5</option><option value="6">Team 6</option>
+        </select>
+      </label>
+      <span id="dirtyBadge" class="badge clean">Saved</span>
+    </section>
+
+    <main class="workspace">
+      <section class="canvas-panel panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">Placement canvas</span><h2>Stage reference</h2></div>
+          <div class="canvas-actions">
+            <button id="captureBtn" class="button">↻ Capture Roblox</button>
+            <button id="recordBtn" class="button accent">● Record in Roblox</button>
+            <button id="previewBtn" class="button success">◇ Dry Preview</button>
+          </div>
+        </div>
+
+        <div id="stageCanvas" class="stage-canvas" aria-label="Clickable Roblox stage screenshot">
+          <img id="stageImage" alt="Roblox capture" draggable="false">
+          <div id="emptyCanvas" class="empty-canvas">
+            <div class="empty-icon">⌗</div>
+            <strong>No stage capture yet</strong>
+            <span>Open a stage and choose Capture Roblox</span>
+          </div>
+          <div id="markerLayer" class="marker-layer"></div>
+          <div class="canvas-grid"></div>
+          <div id="coordinateReadout" class="coordinate-readout">x — · y —</div>
+        </div>
+
+        <div class="placement-dock">
+          <div class="dock-section units-section">
+            <span class="dock-label">Unit slot</span>
+            <div id="unitSlots" class="unit-slots" role="radiogroup"></div>
+          </div>
+          <div class="dock-section compact-fields">
+            <label>After place <input id="placeDelay" type="number" min="0" step="100" value="500"><span>ms</span></label>
+            <label>Upgrade
+              <select id="upgradeTarget">
+                <option value="0">None</option><option value="1">+1</option><option value="2">+2</option>
+                <option value="3">+3</option><option value="4">+4</option><option value="5">+5</option>
+                <option value="max">Max</option>
+              </select>
+            </label>
+            <label>Ability
+              <select id="abilityMode"><option value="off">Off</option><option value="once">Once</option><option value="auto">Auto</option></select>
+            </label>
+            <label>Target
+              <select id="targetMode"><option value="first">First</option><option value="last">Last</option><option value="strongest">Strongest</option><option value="weakest">Weakest</option><option value="closest">Closest</option><option value="flying">Flying</option></select>
+            </label>
+          </div>
+          <div class="dock-hint"><kbd>Click</kbd> canvas to add selected unit · drag markers to adjust</div>
+        </div>
+      </section>
+
+      <aside class="timeline-panel panel">
+        <div class="panel-heading timeline-heading">
+          <div><span class="eyebrow">Execution order</span><h2>Action timeline</h2></div>
+          <span id="actionCount" class="counter">0 actions</span>
+        </div>
+        <div class="action-toolbar">
+          <button data-add="wait">+ Wait</button>
+          <button data-add="upgrade">+ Upgrade</button>
+          <button data-add="ability">+ Ability</button>
+          <button data-add="target">+ Target</button>
+          <button data-add="sell">+ Sell</button>
+        </div>
+        <div id="timeline" class="timeline"></div>
+        <div id="emptyTimeline" class="empty-timeline"><strong>No actions yet</strong><span>Capture a stage, then click placement positions.</span></div>
+        <div class="timeline-footer">
+          <button id="deleteStrategyBtn" class="text-danger">Delete strategy</button>
+          <span>Drag cards to reorder</span>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span><i class="status-dot safe"></i> Input remains disarmed while editing</span>
+      <span id="statusText">Connecting to Hammerspoon…</span>
+      <span id="capturePath"></span>
+    </footer>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
+

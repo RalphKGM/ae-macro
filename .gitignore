@@ -1,0 +1,13 @@
+.DS_Store
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+runtime/captures/*
+runtime/diagnostics/*
+runtime/logs/*
+runtime/checkpoint.json
+runtime/bin/
+!runtime/captures/.gitkeep
+!runtime/diagnostics/.gitkeep
+!runtime/logs/.gitkeep

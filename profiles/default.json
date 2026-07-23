@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "name": "King's Tomb Mastery calibration",
+  "reference_resolution": { "w": 816, "h": 638 },
+  "roblox": {
+    "bundle_id": "com.roblox.RobloxPlayer",
+    "application_name": "Roblox",
+    "content_insets": { "left": 0, "right": 0, "top": 18, "bottom": 0 }
+  },
+  "vision": {
+    "port": 47681,
+    "default_match_threshold": 0.86
+  },
+  "hotkeys": {
+    "stop": { "modifiers": ["ctrl", "alt", "cmd"], "key": "escape" },
+    "permissions": { "modifiers": ["ctrl", "alt", "cmd"], "key": "p" },
+    "align": { "modifiers": ["ctrl", "alt", "cmd"], "key": "l" },
+    "capture": { "modifiers": ["ctrl", "alt", "cmd"], "key": "c" },
+    "mark": { "modifiers": ["ctrl", "alt", "cmd"], "key": "m" },
+    "arm": { "modifiers": ["ctrl", "alt", "cmd"], "key": "a" },
+    "click": { "modifiers": ["ctrl", "alt", "cmd"], "key": "return" },
+    "gui": { "modifiers": ["ctrl", "alt", "cmd"], "key": "g" }
+  },
+  "tasks": [
+    {
+      "enabled": true,
+      "name": "King's Tomb Act 1 Mastery",
+      "mode": "Story",
+      "map": "King's Tomb",
+      "stage": "Act 1",
+      "difficulty": "Mastery",
+      "team": "current",
+      "strategy": "pending-live-calibration",
+      "repetitions": 1,
+      "infinite": false,
+      "retry": { "maximum_consecutive_failures": 3, "on_exhausted": "stop" }
+    }
+  ],
+  "crafting": {
+    "enabled": false,
+    "trigger": { "type": "mastery_victories", "every": 10 },
+    "recipes": [
+      {
+        "enabled": true,
+        "name": "Sprite (Rainbow)",
+        "ingredient": "Sprite (Grey)",
+        "provisional_cost": 30,
+        "quantity": "maximum_affordable",
+        "allow_quick_craft": false,
+        "requires_live_confirmation": true
+      }
+    ]
+  },
+  "challenges": {
+    "enabled": false,
+    "safe_checkpoints_only": true,
+    "kinds": ["regular_side", "hourly", "daily", "weekly"],
+    "fallback_counters": true
+  },
+  "webhooks": {
+    "enabled": false,
+    "keychain_service": "anime-expeditions-mac-discord-webhook",
+    "include_screenshot": true
+  }
+}
