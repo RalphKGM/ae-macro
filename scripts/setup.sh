@@ -41,6 +41,12 @@ if ! command -v cliclick >/dev/null 2>&1; then
   brew install cliclick
 fi
 
+if [[ "${AE_SKIP_V4_MAPS:-0}" != "1" ]]; then
+  if ! "${PROJECT_DIR}/scripts/import_v4_maps.sh"; then
+    print -u2 "warning: v0.4 map images could not be downloaded; the built-in king's tomb map still works"
+  fi
+fi
+
 mkdir -p "${PROJECT_DIR}/runtime/bin"
 swiftc -O "${PROJECT_DIR}/native/ae_input.swift" -o "${PROJECT_DIR}/runtime/bin/ae-input"
 codesign --force --sign - "${PROJECT_DIR}/runtime/bin/ae-input"

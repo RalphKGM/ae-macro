@@ -62,6 +62,8 @@ the default profile uses the current equipped team. the default king's tomb stra
 
 there is no task limit. every task can use a finite repetition count, infinite repetitions, or the queue-loop option.
 
+setup downloads the 21 compatible 816x638 map images from the upstream v0.4 release. these cover the five story maps, spirit city raid acts 1-3, and three expedition maps. a map image provides the placement canvas; it does not provide the lobby navigation route or unit strategy.
+
 king's tomb act 1 mastery has a built-in route. a different map or mode needs a custom lobby route in the task editor until its route is added to the catalog. actions use the same 816x638 reference canvas:
 
 ```json

@@ -10,6 +10,7 @@ runtime/checkpoint.json
 runtime/challenges.json
 runtime/challenges-*.png
 runtime/bin/
+assets/maps/v4/*.png
 !runtime/captures/.gitkeep
 !runtime/diagnostics/.gitkeep
 !runtime/logs/.gitkeep

@@ -11,6 +11,7 @@ local Crafting = require("app.features.crafting")
 local Challenges = require("app.features.challenges")
 local Webhooks = require("app.features.webhooks")
 local Navigation = require("app.features.navigation")
+local MapStore = require("app.features.map_store")
 
 local passed = 0
 local function test(name, fn)
@@ -154,6 +155,22 @@ test("built-in navigation keeps task-level team actions", function()
   })
   assert(route ~= nil and #route.lobby > 0)
   assert(#route.team == 1 and route.team[1].key == "h")
+end)
+
+test("v0.4 map image names cover story raid and expedition", function()
+  local maps = MapStore.new({ root = "/project" })
+  assert(maps:v4Path({
+    mode = "Story", map = "King's Tomb", stage = "Act 1", difficulty = "Mastery",
+  }) == "/project/assets/maps/v4/Story_KingsTomb_Mastery.png")
+  assert(maps:v4Path({
+    mode = "Story", map = "School Grounds", stage = "Infinite", difficulty = "Normal",
+  }) == "/project/assets/maps/v4/Story_SchoolGrounds_Infinite.png")
+  assert(maps:v4Path({
+    mode = "Raid", map = "Spirit City", stage = "Act 3", difficulty = "Hard",
+  }) == "/project/assets/maps/v4/Raid_SpiritCity_Act3.png")
+  assert(maps:v4Path({
+    mode = "Expedition", map = "Flower Forest", stage = "Act 1", difficulty = "Normal",
+  }) == "/project/assets/maps/v4/Expedition_FlowerForest_Exp.png")
 end)
 
 test("profile schema rejects automation points outside the canvas", function()

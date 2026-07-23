@@ -2,9 +2,9 @@ local Catalog = {}
 
 Catalog.modes = {
   { id = "Story", maps = { "School Grounds", "Flower Forest", "Rose Kingdom", "Fairy King Forest", "King's Tomb" } },
-  { id = "Raid", maps = {} },
+  { id = "Raid", maps = { "Spirit City" } },
   { id = "Challenge", maps = { "Regular", "Hourly", "Daily", "Weekly" } },
-  { id = "Expedition", maps = {} },
+  { id = "Expedition", maps = { "School Grounds", "Flower Forest", "Rose Kingdom" } },
 }
 
 Catalog.stages = { "Act 1", "Act 2", "Act 3", "Act 4", "Act 5", "Infinite" }
