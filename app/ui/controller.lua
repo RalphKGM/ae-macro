@@ -13,10 +13,6 @@ local function read(path)
   return contents
 end
 
-local function timestamp()
-  return os.date("!%Y%m%dT%H%M%SZ") .. "-" .. tostring(math.floor((hs.timer.secondsSinceEpoch() % 1) * 1000))
-end
-
 function Controller.new(options)
   return setmetatable({
     root = options.root,
@@ -37,6 +33,9 @@ function Controller.new(options)
     content = nil,
     menu = nil,
     previewTimer = nil,
+    livePreviewTimer = nil,
+    livePreviewEnabled = true,
+    livePreviewError = nil,
   }, Controller)
 end
 
@@ -158,10 +157,12 @@ function Controller:show()
     if not ok then hs.showError("ae gui: " .. tostring(err)) return nil, err end
   end
   self.webview:show():bringToFront(true)
+  self:_startLivePreview()
   return true
 end
 
 function Controller:hide()
+  self:_stopLivePreview()
   if self.webview then self.webview:hide() end
 end
 
@@ -170,18 +171,48 @@ function Controller:toggle()
 end
 
 function Controller:_capturePreview()
-  local output = self.root .. "/runtime/captures/dashboard-" .. timestamp() .. ".png"
-  local id, err = self.capture:normalized(self.vision, self.profile, output, function(result, captureError)
-    if not result then self:_error(captureError) return end
-    local image = hs.image.imageFromPath(result.output_path)
-    if not image then self:_error("could not load dashboard capture") return end
-    self:_send("preview", {
-      image_url = image:encodeAsURLString(),
-      path = result.output_path,
-      label = "roblox · " .. os.date("%H:%M:%S"),
-    })
+  local result, err = self.capture:preview(self.profile)
+  if not result then
+    if self.livePreviewError ~= err then
+      self.livePreviewError = err
+      self:_send("preview_status", { live = false, message = err or "Roblox preview unavailable" })
+    end
+    return nil, err
+  end
+  self.livePreviewError = nil
+  self:_send("preview", {
+    image_url = result.image_url,
+    label = "live roblox · " .. os.date("%H:%M:%S"),
+    capture_ms = result.capture_ms,
+  })
+  return true
+end
+
+function Controller:_stopLivePreview()
+  if self.livePreviewTimer then self.livePreviewTimer:stop() self.livePreviewTimer = nil end
+end
+
+function Controller:_startLivePreview()
+  self:_stopLivePreview()
+  if not self.livePreviewEnabled or not self.webview or not self.webview:isVisible() then return end
+  self:_capturePreview()
+  self.livePreviewTimer = hs.timer.doEvery(0.5, function()
+    if not self.webview or not self.webview:isVisible() or not self.livePreviewEnabled then
+      self:_stopLivePreview()
+      return
+    end
+    self:_capturePreview()
   end)
-  if not id then self:_error(err) end
+end
+
+function Controller:_setLivePreview(enabled)
+  self.livePreviewEnabled = enabled ~= false
+  if self.livePreviewEnabled then
+    self:_startLivePreview()
+  else
+    self:_stopLivePreview()
+    self:_send("preview_status", { live = false, message = "preview paused" })
+  end
 end
 
 function Controller:_captureMap(task)
@@ -226,7 +257,6 @@ end
 
 function Controller:_start(payload)
   if not self.automation then self:_error("run engine is not ready") return end
-  self:hide()
   local ok, err = self.automation:start(payload)
   if not ok then
     self:show()
@@ -255,6 +285,7 @@ function Controller:_handle(message)
   local payload = message.payload or {}
   if operation == "ready" then
     self:_bootstrap()
+    self:_startLivePreview()
   elseif operation == "hide" then
     self:hide()
   elseif operation == "align" then
@@ -262,6 +293,8 @@ function Controller:_handle(message)
     if err then self:_error(err) else self:_toast("roblox aligned") end
   elseif operation == "capture_preview" then
     self:_capturePreview()
+  elseif operation == "set_live_preview" then
+    self:_setLivePreview(payload.enabled)
   elseif operation == "capture_map" then
     self:_captureMap(payload.task)
   elseif operation == "load_map" then
@@ -343,6 +376,7 @@ function Controller:startMenu()
 end
 
 function Controller:stop()
+  self:_stopLivePreview()
   if self.previewTimer then self.previewTimer:stop() self.previewTimer = nil end
   if self.webview then self.webview:delete(true) self.webview = nil end
   self.content = nil

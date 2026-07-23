@@ -255,6 +255,25 @@ h1, h2, h3, p { margin: 0; }
 .preview-toolbar > div:first-child { display: flex; flex-direction: column; }
 .preview-toolbar strong { font-size: 12px; }
 .toolbar-actions { display: flex; align-items: center; gap: 7px; }
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #79dca8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.live-indicator i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #50d18b;
+  box-shadow: 0 0 8px rgba(80, 209, 139, .75);
+}
+.live-indicator.paused { color: var(--muted); }
+.live-indicator.paused i { background: #687180; box-shadow: none; }
 .eyebrow { display: block; margin-bottom: 3px; color: var(--gold); font-size: 9px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
 .roblox-preview {
   position: relative;

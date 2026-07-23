@@ -24,6 +24,7 @@
     actionDrag: null,
     sequence: 0,
     mapUrl: null,
+    livePreview: true,
     startedAt: null,
     dirty: false,
   };
@@ -87,6 +88,18 @@
     $("#dashboardImage").src = payload.image_url;
     dashboard.classList.add("has-image");
     $("#previewLabel").textContent = payload.label || "current window";
+    const indicator = $("#livePreviewStatus");
+    indicator.classList.remove("paused");
+    indicator.lastChild.textContent = " live";
+  }
+
+  function setLivePreview(enabled) {
+    state.livePreview = enabled;
+    $("#captureBtn").textContent = enabled ? "pause preview" : "resume preview";
+    const indicator = $("#livePreviewStatus");
+    indicator.classList.toggle("paused", !enabled);
+    indicator.lastChild.textContent = enabled ? " live" : " paused";
+    bridge.send("set_live_preview", { enabled });
   }
 
   function setMap(payload) {
@@ -538,7 +551,7 @@
     $("#openPositionsBtn").addEventListener("click", () => showView("positions"));
     $("#minimizeBtn").addEventListener("click", () => bridge.send("hide"));
     $("#alignBtn").addEventListener("click", () => bridge.send("align"));
-    $("#captureBtn").addEventListener("click", () => bridge.send("capture_preview"));
+    $("#captureBtn").addEventListener("click", () => setLivePreview(!state.livePreview));
 
     const start = () => {
       state.selectedTask = number($("#runTaskSelect").value, state.selectedTask);
@@ -793,7 +806,11 @@
         log("gui ready");
       } else if (event === "preview") {
         setPreview(payload);
-        log("preview updated");
+      } else if (event === "preview_status") {
+        const unavailable = payload.live === false;
+        $("#livePreviewStatus").classList.toggle("paused", unavailable);
+        $("#livePreviewStatus").lastChild.textContent = unavailable ? " unavailable" : " live";
+        if (payload.message) $("#previewLabel").textContent = payload.message;
       } else if (event === "map") {
         setMap(payload);
         if (payload.image_url) toast("map image loaded");

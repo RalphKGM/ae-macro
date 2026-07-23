@@ -6,7 +6,7 @@ the included default is ready for king's tomb act 1 mastery. other modes can be 
 
 ## what works
 
-- dashboard with start, pause, stop, status, logs, and run stats
+- dashboard with a continuous live roblox preview, start, pause, stop, status, logs, and run stats
 - unlimited ordered tasks with duplicate, reorder, enable, finite, infinite, and queue-loop controls
 - story, raid, challenge, and expedition task types
 - king's tomb act 1 mastery lobby navigation
@@ -55,6 +55,8 @@ check the install:
 3. check the task, strategy, and positions tabs.
 4. leave `start from` on `auto detect`.
 5. press `start selected task`.
+
+the dashboard preview mirrors the current roblox window twice per second. the positions tab is separate: it shows the saved bird's-eye image for the selected mode, map, stage, and difficulty.
 
 the default profile uses the current equipped team. the default king's tomb strategy has six placements and adds auto upgrade to the dps placements.
 
